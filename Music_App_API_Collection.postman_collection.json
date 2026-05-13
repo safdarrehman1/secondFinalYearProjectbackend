@@ -1,0 +1,1626 @@
+{
+  "info": {
+    "_postman_id": "music-app-backend-api",
+    "name": "Music App Backend - Complete API Collection",
+    "description": "Complete API collection for Music App Backend\nBase URL: http://localhost:5051/v1\n\nTest Users:\n- Email: recruiter@example.com | Password: password123\n- Email: professional@example.com | Password: password123",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "version": "1.7.0",
+    "_exporter_id": "12345678"
+  },
+  "item": [
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "Register User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"John Doe\",\n  \"email\": \"john@example.com\",\n  \"password\": \"Password123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/register",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "register"
+              ]
+            },
+            "description": "Register a new user account"
+          },
+          "response": []
+        },
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"recruiter@example.com\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Login user and get access token"
+          },
+          "response": []
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refresh_token}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/logout",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "logout"
+              ]
+            },
+            "description": "Logout current user"
+          },
+          "response": []
+        },
+        {
+          "name": "Refresh Tokens",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refresh_token}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/refresh-tokens",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "refresh-tokens"
+              ]
+            },
+            "description": "Refresh access and refresh tokens"
+          },
+          "response": []
+        },
+        {
+          "name": "Forgot Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"test@example.com\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/forgot-password",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "forgot-password"
+              ]
+            },
+            "description": "Request password reset email"
+          },
+          "response": []
+        },
+        {
+          "name": "Reset Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"password\": \"NewPassword123\",\n  \"token\": \"reset-token-here\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/reset-password",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "reset-password"
+              ]
+            },
+            "description": "Reset password with token"
+          },
+          "response": []
+        },
+        {
+          "name": "Change Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"oldPassword\": \"password123\",\n  \"password\": \"NewPassword123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/change-password",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "change-password"
+              ]
+            },
+            "description": "Change current user password"
+          },
+          "response": []
+        },
+        {
+          "name": "Verify Email",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/auth/verify-email?token=email-verification-token",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "verify-email"
+              ],
+              "query": [
+                {
+                  "key": "token",
+                  "value": "email-verification-token"
+                }
+              ]
+            },
+            "description": "Verify email with token"
+          },
+          "response": []
+        },
+        {
+          "name": "Send Verification Email",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/auth/send-verification-email",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "send-verification-email"
+              ]
+            },
+            "description": "Resend email verification link"
+          },
+          "response": []
+        },
+        {
+          "name": "Google Register",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"John Doe\",\n  \"email\": \"john@gmail.com\",\n  \"googleId\": \"google-id-here\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/google-register",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "google-register"
+              ]
+            },
+            "description": "Register or login via Google"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Users",
+      "item": [
+        {
+          "name": "Get Current User",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/users/me",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "users",
+                "me"
+              ]
+            },
+            "description": "Get current authenticated user profile"
+          },
+          "response": []
+        },
+        {
+          "name": "Get User by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/users/get-user-by-id/user-id-here",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "users",
+                "get-user-by-id",
+                "user-id-here"
+              ]
+            },
+            "description": "Get any user profile by ID"
+          },
+          "response": []
+        },
+        {
+          "name": "Get All Users (Admin)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/users?limit=10&page=1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "users"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "10"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                }
+              ]
+            },
+            "description": "Get all users (admin only)"
+          },
+          "response": []
+        },
+        {
+          "name": "Get My Billing Info",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/users/me/billing",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "users",
+                "me",
+                "billing"
+              ]
+            },
+            "description": "Get current user's billing information"
+          },
+          "response": []
+        },
+        {
+          "name": "Get My Balance",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/users/me/balance",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "users",
+                "me",
+                "balance"
+              ]
+            },
+            "description": "Get current user's wallet balance"
+          },
+          "response": []
+        },
+        {
+          "name": "Get My Transactions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/users/me/transactions",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "users",
+                "me",
+                "transactions"
+              ]
+            },
+            "description": "Get current user's transaction history"
+          },
+          "response": []
+        },
+        {
+          "name": "Follow User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/users/follow/user-id-here",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "users",
+                "follow",
+                "user-id-here"
+              ]
+            },
+            "description": "Follow a user"
+          },
+          "response": []
+        },
+        {
+          "name": "Unfollow User",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/users/follow/user-id-here",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "users",
+                "follow",
+                "user-id-here"
+              ]
+            },
+            "description": "Unfollow a user"
+          },
+          "response": []
+        },
+        {
+          "name": "Get My Following",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/users/me/following",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "users",
+                "me",
+                "following"
+              ]
+            },
+            "description": "Get list of users you're following"
+          },
+          "response": []
+        },
+        {
+          "name": "Cancel Account",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/users/cancel-account",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "users",
+                "cancel-account"
+              ]
+            },
+            "description": "Request account cancellation (10-day grace period)"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Jobs",
+      "item": [
+        {
+          "name": "Get All Jobs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/job?limit=10&page=1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "job"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "10"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                }
+              ]
+            },
+            "description": "Get all job postings with pagination"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Job by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/job/job-id-here",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "job",
+                "job-id-here"
+              ]
+            },
+            "description": "Get specific job details"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Job",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"projectTitle\": \"Mobile App UI Design\",\n  \"category\": [\"Design\", \"UI/UX\"],\n  \"budget\": \"$1000 - $2000\",\n  \"timeFrame\": \"1 month\",\n  \"description\": \"We need a talented UI/UX designer for our mobile app project\",\n  \"jobType\": [\"Remote\", \"Freelance\"]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/job",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "job"
+              ]
+            },
+            "description": "Create a new job posting"
+          },
+          "response": []
+        },
+        {
+          "name": "Update Job",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"projectTitle\": \"Updated Job Title\",\n  \"status\": \"closed\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/job/job-id-here",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "job",
+                "job-id-here"
+              ]
+            },
+            "description": "Update job posting"
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Job",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/job/job-id-here",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "job",
+                "job-id-here"
+              ]
+            },
+            "description": "Delete a job posting"
+          },
+          "response": []
+        },
+        {
+          "name": "Apply for Job",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"message\": \"I'm very interested in this project and have experience with similar work.\",\n  \"musicIds\": []\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/job/job-id-here/apply",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "job",
+                "job-id-here",
+                "apply"
+              ]
+            },
+            "description": "Apply for a specific job"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Music",
+      "item": [
+        {
+          "name": "Get All Music",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/music?limit=20&page=1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "music"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                }
+              ]
+            },
+            "description": "Get all music tracks"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Music by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/music/music-id-here",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "music",
+                "music-id-here"
+              ]
+            },
+            "description": "Get specific music details"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Music",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Beautiful Morning\",\n  \"artist\": \"Artist Name\",\n  \"genre\": \"Pop\",\n  \"duration\": 240,\n  \"description\": \"A beautiful morning track\",\n  \"isPublic\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/music",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "music"
+              ]
+            },
+            "description": "Create new music track"
+          },
+          "response": []
+        },
+        {
+          "name": "Update Music",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Updated Music Title\",\n  \"genre\": \"Jazz\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/music/music-id-here",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "music",
+                "music-id-here"
+              ]
+            },
+            "description": "Update music track"
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Music",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/music/music-id-here",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "music",
+                "music-id-here"
+              ]
+            },
+            "description": "Delete music track"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "User Space",
+      "item": [
+        {
+          "name": "Get All User Spaces",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/user-space?limit=10&page=1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "user-space"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "10"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                }
+              ]
+            },
+            "description": "Get all user spaces"
+          },
+          "response": []
+        },
+        {
+          "name": "Get User Space by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/user-space/space-id-here",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "user-space",
+                "space-id-here"
+              ]
+            },
+            "description": "Get specific user space"
+          },
+          "response": []
+        },
+        {
+          "name": "Create User Space",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"John\",\n  \"lastName\": \"Doe\",\n  \"isClient\": false,\n  \"creationOccupation\": [\"Designer\", \"Animator\"],\n  \"businessOccupation\": \"Creative Director\",\n  \"address\": \"New York, NY\",\n  \"aboutMe\": \"Experienced designer with 5+ years\",\n  \"myServices\": [\"Logo Design\", \"Branding\"],\n  \"softwareTool\": [\"Adobe Illustrator\", \"Figma\"]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/user-space",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "user-space"
+              ]
+            },
+            "description": "Create user space/profile"
+          },
+          "response": []
+        },
+        {
+          "name": "Update User Space",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"aboutMe\": \"Updated bio information\",\n  \"myServices\": [\"Logo Design\", \"Branding\", \"Web Design\"]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/user-space/space-id-here",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "user-space",
+                "space-id-here"
+              ]
+            },
+            "description": "Update user space"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Orders",
+      "item": [
+        {
+          "name": "Get All Orders",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/order?limit=10&page=1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "order"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "10"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                }
+              ]
+            },
+            "description": "Get all orders for current user"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Order by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/order/order-id-here",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "order",
+                "order-id-here"
+              ]
+            },
+            "description": "Get specific order details"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Order",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sellerId\": \"seller-user-id\",\n  \"serviceId\": \"service-id\",\n  \"amount\": 500,\n  \"currency\": \"USD\",\n  \"description\": \"Logo design service\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/order",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "order"
+              ]
+            },
+            "description": "Create new order"
+          },
+          "response": []
+        },
+        {
+          "name": "Update Order Status",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"completed\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/order/order-id-here",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "order",
+                "order-id-here"
+              ]
+            },
+            "description": "Update order status"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Chat",
+      "item": [
+        {
+          "name": "Get All Conversations",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/chat-system?limit=20&page=1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "chat-system"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                }
+              ]
+            },
+            "description": "Get all chat conversations"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Conversation by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/chat-system/conversation-id-here",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "chat-system",
+                "conversation-id-here"
+              ]
+            },
+            "description": "Get specific conversation details"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Conversation",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"recipientId\": \"recipient-user-id\",\n  \"initialMessage\": \"Hi! I'm interested in your services.\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/chat-system",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "chat-system"
+              ]
+            },
+            "description": "Start new conversation"
+          },
+          "response": []
+        },
+        {
+          "name": "Send Message",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"This is my message\",\n  \"isCard\": false\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/chat-system/conversation-id-here/messages",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "chat-system",
+                "conversation-id-here",
+                "messages"
+              ]
+            },
+            "description": "Send message in conversation"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Payments - Stripe",
+      "item": [
+        {
+          "name": "Create Payment Intent",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 5000,\n  \"currency\": \"usd\",\n  \"orderId\": \"order-id-here\",\n  \"description\": \"Payment for service\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/stripe/create-intent",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "stripe",
+                "create-intent"
+              ]
+            },
+            "description": "Create Stripe payment intent"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Payments - Square",
+      "item": [
+        {
+          "name": "Process Square Payment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 5000,\n  \"currency\": \"USD\",\n  \"orderId\": \"order-id-here\",\n  \"sourceId\": \"square-source-id\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/square/pay",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "square",
+                "pay"
+              ]
+            },
+            "description": "Process payment via Square"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Gigs",
+      "item": [
+        {
+          "name": "Get All Gigs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/gigs?limit=20&page=1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "gigs"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                }
+              ]
+            },
+            "description": "Get all gigs"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Gig",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Professional Logo Design\",\n  \"category\": \"Design\",\n  \"startingPrice\": 500,\n  \"description\": \"I will create a professional logo for your business\",\n  \"tags\": [\"logo\", \"branding\", \"design\"]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/gigs",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "gigs"
+              ]
+            },
+            "description": "Create new gig"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Blog",
+      "item": [
+        {
+          "name": "Get All Blog Posts",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/blog?limit=10&page=1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "blog"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "10"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                }
+              ]
+            },
+            "description": "Get all blog posts"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Blog Post",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Tips for Remote Work\",\n  \"content\": \"Here are some tips for being productive while working remotely...\",\n  \"tags\": [\"remote\", \"productivity\", \"work\"],\n  \"isPublished\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/blog",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "blog"
+              ]
+            },
+            "description": "Create new blog post"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Notifications",
+      "item": [
+        {
+          "name": "Get Notifications",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/notifications?limit=20&page=1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "notifications"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                }
+              ]
+            },
+            "description": "Get notifications for current user"
+          },
+          "response": []
+        },
+        {
+          "name": "Mark Notification as Read",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"isRead\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/notifications/notification-id-here",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "notifications",
+                "notification-id-here"
+              ]
+            },
+            "description": "Mark notification as read"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Reports",
+      "item": [
+        {
+          "name": "Get All Reports",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/reports?limit=10&page=1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "reports"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "10"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                }
+              ]
+            },
+            "description": "Get all reports (admin)"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Report",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reportType\": \"user\",\n  \"reportedUserId\": \"user-id-here\",\n  \"reason\": \"Inappropriate behavior\",\n  \"description\": \"User was being disruptive in chat\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/reports",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "reports"
+              ]
+            },
+            "description": "Create new report"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Contact Us",
+      "item": [
+        {
+          "name": "Send Contact Message",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"John Doe\",\n  \"email\": \"john@example.com\",\n  \"subject\": \"Question about services\",\n  \"message\": \"I have a question about your services...\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/contact-us",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "contact-us"
+              ]
+            },
+            "description": "Send contact us message"
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:5051/v1",
+      "type": "string"
+    },
+    {
+      "key": "access_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "refresh_token",
+      "value": "",
+      "type": "string"
+    }
+  ]
+}

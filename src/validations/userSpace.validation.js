@@ -1,0 +1,96 @@
+const Joi = require("joi");
+
+const getSpace = {};
+
+const addSpace = {
+  body: Joi.object().keys({
+    firstName: Joi.string().required(),
+    lastName: Joi.string().required(),
+    creationOccupation: Joi.array().items(Joi.string()),
+    isClient: Joi.boolean(),
+    hiring: Joi.string().allow(""),
+    designFees: Joi.number().min(5).max(10000).allow(null),
+    // Removed music-related validations
+    websiteUrl: Joi.string().allow(""),
+    companyOrStudio: Joi.string().allow(""), // tidak required
+    aboutMe: Joi.string().required(),
+    softwareTool: Joi.array().items(Joi.string()),
+    linkedin: Joi.string().allow(""),
+    // Removed commented social media fields
+    x: Joi.string(),
+    facebook: Joi.string(),
+    instagram: Joi.string(),
+    snapchat: Joi.string(),
+    tiktok: Joi.string(),
+    tumblr: Joi.string(),
+    twitch: Joi.string(),
+    businessOccupation: Joi.any().strip(), // Strip businessOccupation (Supplement field removed)
+    location: Joi.string(),
+    state: Joi.string(),
+    city: Joi.string(),
+    profilePicture: Joi.string(),
+    address: Joi.string().required(),
+    myServices: Joi.array().items(Joi.string()),
+    // Derived metrics: allow but strip if provided
+    orderQuantity: Joi.any().strip(),
+    sellerReviews: Joi.any().strip(),
+    orderRating: Joi.any().strip(),
+    buyerQuantity: Joi.any().strip(),
+    buyerRating: Joi.any().strip(),
+    sellerTotalOrders: Joi.any().strip(),
+    totalCollect: Joi.any().strip(),
+    followers: Joi.any().strip(),
+    country: Joi.any().strip(),
+  }),
+};
+
+const editSpace = {};
+
+const updateSpace = {
+  body: Joi.object().keys({
+    firstName: Joi.string(),
+    lastName: Joi.string(),
+    creationOccupation: Joi.array().items(Joi.string()),
+    isClient: Joi.boolean(),
+    businessOccupation: Joi.any().strip(), // Strip businessOccupation (Supplement field removed)
+    hiring: Joi.string().allow(""),
+    designFees: Joi.number().min(5).max(10000).allow(null),
+    // Removed music-related validations
+    companyOrStudio: Joi.string().allow(""),
+    websiteUrl: Joi.string().allow(""),
+    aboutMe: Joi.string().allow(""),
+    softwareTool: Joi.array().items(Joi.string()),
+    // Removed commented social media fields
+    x: Joi.string(),
+    facebook: Joi.string(),
+    instagram: Joi.string(),
+    snapchat: Joi.string(),
+    tiktok: Joi.string(),
+    tumblr: Joi.string(),
+    twitch: Joi.string(),
+    linkedin: Joi.string(),
+    location: Joi.string(),
+    state: Joi.string(),
+    city: Joi.string(),
+    profilePicture: Joi.string(),
+    address: Joi.string(),
+    myServices: Joi.array().items(Joi.string()),
+    // Derived metrics: allow but strip to avoid 400 and prevent manual override
+    orderQuantity: Joi.any().strip(),
+    sellerReviews: Joi.any().strip(),
+    orderRating: Joi.any().strip(),
+    buyerQuantity: Joi.any().strip(),
+    buyerRating: Joi.any().strip(),
+    sellerTotalOrders: Joi.any().strip(),
+    totalCollect: Joi.any().strip(),
+    followers: Joi.any().strip(),
+    country: Joi.any().strip(),
+  }),
+};
+
+module.exports = {
+  getSpace,
+  addSpace,
+  editSpace,
+  updateSpace,
+};

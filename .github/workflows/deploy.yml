@@ -1,0 +1,48 @@
+name: Deploy API to Server
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.SSH_HOST }}          
+          username: ${{ secrets.SSH_USER }}    
+          port: ${{ secrets.SSH_PORT || 22 }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            set -e
+
+            cd /var/www/html/pallavin-be
+
+            # pull latest changes
+            git pull
+
+            # install pnpm if not installed
+            if ! command -v pnpm >/dev/null 2>&1; then
+              npm install -g pnpm
+            fi
+
+            # install dependencies with pnpm
+            pnpm install --frozen-lockfile || pnpm install
+
+            # check if pm2 process exists
+            if pm2 describe api-pallavin > /dev/null 2>&1; then
+              echo "PM2 process exists. Restarting..."
+              pm2 restart api-pallavin
+            else
+              echo "PM2 process not found. Starting new process..."
+              pm2 start pnpm --name api-pallavin -- start
+            fi
+
+            # save pm2 state (so it restarts on reboot)
+            pm2 save
