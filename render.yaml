@@ -7,4 +7,25 @@ services:
     envVars:
       - key: NODE_VERSION
         value: 20.11.0
-
+      - key: NODE_ENV
+        value: production
+      - key: MONGODB_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_ACCESS_EXPIRATION_MINUTES
+        value: 30
+      - key: JWT_ACCESS_EXPIRATION_HOURS
+        value: 1
+      - key: JWT_REFRESH_EXPIRATION_DAYS
+        value: 30
+      - key: JWT_RESET_PASSWORD_EXPIRATION_MINUTES
+        value: 10
+      - key: JWT_VERIFY_EMAIL_EXPIRATION_MINUTES
+        value: 10
+      - key: RESEND_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
+      - key: FRONTEND_URL
+        sync: false

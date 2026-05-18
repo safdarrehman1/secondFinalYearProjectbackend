@@ -4,17 +4,39 @@ const Joi = require("joi");
 
 dotenv.config({ path: path.join(__dirname, "../../.env") });
 
+// Render/Atlas examples often use MONGO_URI or MONGO_URL. Normalize them so
+// the rest of the app can keep using the existing MONGODB_URL config key.
+process.env.MONGODB_URL =
+  process.env.MONGODB_URL || process.env.MONGO_URI || process.env.MONGO_URL;
+
 const envVarsSchema = Joi.object()
   .keys({
     NODE_ENV: Joi.string()
       .valid("production", "development", "test")
       .required(),
     PORT: Joi.number().default(3000),
-    MONGODB_URL: Joi.string().required().description("Mongo DB url"),
-    JWT_SECRET: Joi.string().required().description("JWT secret key"),
+    MONGODB_URL: Joi.string()
+      .required()
+      .description("Mongo DB url")
+      .messages({
+        "any.required":
+          "MONGODB_URL is required. In Render, add your MongoDB Atlas connection string as MONGODB_URL, MONGO_URI, or MONGO_URL.",
+        "string.empty":
+          "MONGODB_URL is empty. In Render, add your MongoDB Atlas connection string as MONGODB_URL, MONGO_URI, or MONGO_URL.",
+      }),
+    JWT_SECRET: Joi.string()
+      .required()
+      .description("JWT secret key")
+      .messages({
+        "any.required": "JWT_SECRET is required. Add a long random secret in Render environment variables.",
+        "string.empty": "JWT_SECRET is empty. Add a long random secret in Render environment variables.",
+      }),
     JWT_ACCESS_EXPIRATION_MINUTES: Joi.number()
       .default(30)
       .description("minutes after which access tokens expire"),
+    JWT_ACCESS_EXPIRATION_HOURS: Joi.number()
+      .default(1)
+      .description("hours after which access tokens expire"),
     JWT_REFRESH_EXPIRATION_DAYS: Joi.number()
       .default(30)
       .description("days after which refresh tokens expire"),
@@ -24,7 +46,13 @@ const envVarsSchema = Joi.object()
     JWT_VERIFY_EMAIL_EXPIRATION_MINUTES: Joi.number()
       .default(10)
       .description("minutes after which verify email token expires"),
-    RESEND_API_KEY: Joi.string().required().description("Resend API key"),
+    RESEND_API_KEY: Joi.string()
+      .required()
+      .description("Resend API key")
+      .messages({
+        "any.required": "RESEND_API_KEY is required. Add it in Render environment variables.",
+        "string.empty": "RESEND_API_KEY is empty. Add it in Render environment variables.",
+      }),
     EMAIL_FROM: Joi.string().allow("").optional().description(
       "the from field in the emails sent by the app",
     ),
