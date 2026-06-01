@@ -215,7 +215,6 @@ const getOrderDetails = async (orderId, userId, role) => {
       review: order.review,
       paymentMethod: order.paymentMethod,
       paymentId: order.paymentId,
-      musicIds: order.musicIds,
       // Client info
       client: {
         id: order.createdBy?._id,

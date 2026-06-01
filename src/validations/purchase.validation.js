@@ -21,18 +21,6 @@ const getPurchaseDetails = {
   }),
 };
 
-const generateDownloadUrl = {
-  params: Joi.object().keys({
-    purchaseId: Joi.string().custom(objectId).required(),
-  }),
-};
-
-const downloadPurchasedFile = {
-  params: Joi.object().keys({
-    purchaseId: Joi.string().custom(objectId).required(),
-    token: Joi.string().required(),
-  }),
-};
 
 const getSalesData = {
   query: Joi.object().keys({
@@ -51,7 +39,5 @@ const getSalesData = {
 module.exports = {
   getPurchaseHistory,
   getPurchaseDetails,
-  generateDownloadUrl,
-  downloadPurchasedFile,
   getSalesData,
 };

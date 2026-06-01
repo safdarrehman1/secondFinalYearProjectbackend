@@ -30,11 +30,11 @@ const upload = multer({
 // Upload file to S3 manually
 async function uploadFileToS3(file, userId = "anonymous") {
   const fileExt = path.extname(file.originalname);
-  let folder = "music/others";
+  let folder = "job-assets/others";
 
-  if (file.fieldname === "musicImage") folder = "music/images";
-  if (file.fieldname === "musicAudio") folder = "music/audio";
-  if (file.fieldname === "musicBackground") folder = "music/backgrounds";
+  if (file.fieldname === "jobImage") folder = "job-assets/images";
+  if (file.fieldname === "jobFile") folder = "job-assets/files";
+  if (file.fieldname === "jobBackground") folder = "job-assets/backgrounds";
   if (
     file.fieldname === "attachment" ||
     file.fieldname === "cancellationAttachment"
@@ -74,7 +74,7 @@ async function getFileStreamFromS3(fileKey) {
 }
 
 module.exports = {
-  upload, // for use in routes like upload.single('musicAudio')
+  upload,
   uploadFileToS3,
   getFileStreamFromS3,
 };

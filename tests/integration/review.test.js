@@ -81,12 +81,12 @@ describe("Review Routes Integration", () => {
 
       // Create a mock gig
       gig = await Gig.create({
-        title: "Test Gig Music Production",
+        title: "Test Gig Architecture Design",
         coverImage: "http://example.com/image.jpg",
         seller: seller._id, // Field name is seller, not owner
         price: 50,
         deliveryTime: 3,
-        category: "music-production", // Valid enum
+        category: "Architecture Design Services", // Valid enum
         status: "active",
         description: "A test gig description",
         videos: ["http://example.com/video.mp4"], // Required field

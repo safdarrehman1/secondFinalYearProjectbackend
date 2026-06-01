@@ -6,22 +6,6 @@ const createGig = {
       .keys({
         title: Joi.string().required().max(80).trim(),
         category: Joi.string().required().valid(
-          // Music / Audio
-          "music-production",
-          "mixing-mastering",
-          "songwriting",
-          "vocal-recording",
-          "beat-making",
-          "lyrics-writing",
-          "voice-over",
-          "podcast-editing",
-          "sound-design",
-          "jingle-creation",
-          "instruments",
-          "composition",
-          "vocals",
-          "audio-engineering",
-
           // Design categories (MATCH FRONTEND EXACTLY)
           "Architecture Design Services",
           "Interior Design Services",
@@ -87,11 +71,6 @@ const createGig = {
         videos: Joi.array().items(Joi.string()).max(5).optional().default([]),
         images: Joi.array().items(Joi.string()).max(8).optional().default([]),
         coverImageIndex: Joi.number().min(0).optional().default(0),
-        referenceSongs: Joi.array()
-          .items(Joi.string())
-          .max(4)
-          .optional()
-          .default([]),
         referenceArtworks: Joi.array()
           .items(Joi.string())
           .max(4)
@@ -181,22 +160,6 @@ const updateGig = {
     .keys({
       title: Joi.string().max(80).trim(),
       category: Joi.string().valid(
-        // Music / Audio
-        "music-production",
-        "mixing-mastering",
-        "songwriting",
-        "vocal-recording",
-        "beat-making",
-        "lyrics-writing",
-        "voice-over",
-        "podcast-editing",
-        "sound-design",
-        "jingle-creation",
-        "instruments",
-        "composition",
-        "vocals",
-        "audio-engineering",
-
         // Design categories (MATCH FRONTEND EXACTLY)
         "Architecture Design Services",
         "Interior Design Services",
@@ -244,7 +207,6 @@ const updateGig = {
       videos: Joi.array().items(Joi.string()).max(5).default([]),
       images: Joi.array().items(Joi.string()).max(8).default([]),
       coverImageIndex: Joi.number().min(0).default(0),
-      referenceSongs: Joi.array().items(Joi.string()).max(4).default([]),
       referenceArtworks: Joi.array().items(Joi.string()).max(4).default([]),
       videoUrl: Joi.string().uri().allow(""),
       audioSamples: Joi.array()

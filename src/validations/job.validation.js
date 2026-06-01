@@ -6,9 +6,6 @@ const postJob = {
     position: Joi.string().optional().allow(""),
     projectTitle: Joi.string().required(),
     category: Joi.array().items(Joi.string()).min(0).max(5).optional(),
-    isHaveLyric: Joi.boolean().optional(),
-    lyricLanguage: Joi.string(),
-    musicUse: Joi.array().items(Joi.string()).optional(),
     cultureArea: Joi.array().items(Joi.string()),
     designCategory: Joi.string().required(),
     designSubcategory: Joi.array().items(Joi.string()).optional(),
@@ -20,10 +17,6 @@ const postJob = {
     applicantName: Joi.string(),
     applicantAvatar: Joi.string().uri().optional(),
     applicantBackgroundImage: Joi.string().uri().optional(),
-    applicantSelectedSongs: Joi.array()
-      .items(Joi.string().custom(objectId))
-      .min(0)
-      .max(2),
     savedBy: Joi.array().items(Joi.string().custom(objectId)) || Joi.array(),
     createdBy: Joi.string(),
     paymentId: Joi.string().optional(),
@@ -62,7 +55,6 @@ const applyJob = {
   }),
   body: Joi.object().keys({
     applyJob: {
-      musicIds: Joi.array().items(Joi.string()).required(),
       message: Joi.string().required(),
       jobId: Joi.string().custom(objectId).required(),
       name: Joi.string().optional().allow("").min(1, "utf-8").messages({

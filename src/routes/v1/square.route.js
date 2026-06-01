@@ -17,7 +17,7 @@ router.get('/undefined/settings', (req, res) => {
   // Get dynamic frontend URL
   const frontendUrl = process.env.FRONTEND_URL || 
                      (process.env.NODE_ENV === 'production' 
-                       ? 'https://musicapp2025-fe1.vercel.app'
+                       ? 'http://localhost:3000'
                        : `http://localhost:${process.env.FRONTEND_PORT || '3000'}`);
   
   // Extract error from query and redirect properly
@@ -36,7 +36,6 @@ router.post('/payment', auth(), squareController.createSimplePayment); // New si
 router.get('/payment-test', squareController.testSquareConfig); // Test endpoint without auth for debugging
 router.post('/payment-test', squareController.createSimplePayment); // Test payment without auth - FOR DEBUGGING ONLY
 router.post('/payments', auth(), validate(squareValidation.createPayment), squareController.createPayment);
-router.post('/purchase-music', auth(), squareController.createMusicPayment);
 router.get('/payments/:paymentId', auth(), validate(squareValidation.getPayment), squareController.getPayment);
 router.get('/payments', auth(), validate(squareValidation.listPayments), squareController.listPayments);
 

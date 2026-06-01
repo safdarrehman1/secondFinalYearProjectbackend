@@ -10,7 +10,6 @@ const router = express.Router();
 
 router.route('/').get(auth(), validate(userSpaceValidation.getSpace), userSpaceController.getSpace);
 router.route('/add').post(auth('user'), validate(userSpaceValidation.addSpace), userSpaceController.addSpace);
-// router.route('/edit').get(auth('users'), validate(userSpaceValidation.editSpace), userSpaceController.uploadMusic);
 router.route('/update').patch(auth('user'), validate(userSpaceValidation.updateSpace), userSpaceController.updateSpace);
 router.route('/upload-cover').post(
   auth('user'),

@@ -451,7 +451,7 @@ const ChatService = {
               email: otherUser?.email,
               avatar:
                 avatar ??
-                "https://musicimagevideos.s3.ap-southeast-2.amazonaws.com/music/others/685faf70bfcdd925769fa07a/1751101939604-Screen%20Shot%202025-06-28%20at%2016.12.06.png",
+                "",
               chatId: chat._id,
               lastMessage,
               jobTitle: chat.jobId?.projectTitle,

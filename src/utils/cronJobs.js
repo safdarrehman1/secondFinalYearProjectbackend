@@ -1,6 +1,5 @@
 const cron = require("node-cron");
 const AccountCleanupService = require("../services/accountCleanup.service");
-const { virtualStatsService } = require("../services");
 
 /**
  * Initialize all cron jobs
@@ -63,22 +62,6 @@ function initializeCronJobs() {
   //   timezone: "UTC"
   // });
 
-  // Run virtual stats increment daily at 1 AM
-  cron.schedule(
-    "0 1 * * *",
-    async () => {
-      console.log("Running Virtual Stats Increment Cron and Automation...");
-      try {
-        await virtualStatsService.incrementVirtualStats();
-      } catch (error) {
-        console.error("Cron Error (Virtual Stats/Automation):", error);
-      }
-    },
-    {
-      scheduled: true,
-      timezone: "UTC",
-    },
-  );
 }
 
 module.exports = {

@@ -211,9 +211,9 @@ async function uploadFileToS3(file, userId = 'anonymous') {
   const fileName = file.fieldname;
   let folder = 'uploads/others';
 
-  if (file.fieldname === 'musicImage') folder = 'uploads/images';
-  else if (file.fieldname === 'musicAudio') folder = 'uploads/audio';
-  else if (file.fieldname === 'musicBackground') folder = 'uploads/backgrounds';
+  if (file.fieldname === 'jobImage') folder = 'uploads/images';
+  else if (file.fieldname === 'jobFile') folder = 'uploads/files';
+  else if (file.fieldname === 'jobBackground') folder = 'uploads/backgrounds';
   else if (file.fieldname === 'attachment') folder = 'uploads/chat-attachments';
   else if (file.fieldname === 'video') folder = 'uploads/gig-videos';
   else if (file.fieldname === 'assetImage') folder = 'uploads/asset-images';
@@ -238,7 +238,7 @@ async function uploadFileToS3(file, userId = 'anonymous') {
 }
 
 module.exports = {
-  uploadDynamic,       // use in routes: uploadDynamic.fields([{ name: 'musicImage' }, ...])
+  uploadDynamic,
   uploadAssetFile,     // use for asset files with 2GB limit
   uploadChatAttachment, // use in chat routes: uploadChatAttachment.single('attachment')
   uploadFileToS3,      // call manually in your controller for each file

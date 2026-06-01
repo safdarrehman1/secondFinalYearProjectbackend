@@ -22,25 +22,18 @@ const validateGigAgainstProfile = (
 ) => {
   // Define category to profession mappings
   const categoryToOccupationMap = {
-    // Music categories
-    "music-production": ["Producer", "Music Producer", "Audio Engineer"],
-    "mixing-mastering": ["Audio Engineer", "Sound Engineer", "Mixing Engineer"],
-    songwriting: ["Songwriter", "Composer", "Music Writer"],
-    "vocal-recording": ["Vocalist", "Singer", "Vocal Engineer"],
-    "beat-making": ["Beat Maker", "Producer", "Music Producer"],
-    "lyrics-writing": ["Lyricist", "Songwriter", "Music Writer"],
-    "voice-over": ["Voice Actor", "Voiceover Artist", "Sound Engineer"],
-    "podcast-editing": ["Podcast Producer", "Audio Editor", "Sound Engineer"],
-    "sound-design": ["Sound Designer", "Audio Engineer", "Sound Engineer"],
-    "jingle-creation": ["Composer", "Music Producer", "Jingle Writer"],
-    instruments: ["Musician", "Instrumentalist", "Session Musician"],
-    composition: ["Composer", "Music Composer", "Arranger"],
-    vocals: ["Vocalist", "Singer", "Session Vocalist"],
-    "audio-engineering": [
-      "Audio Engineer",
-      "Sound Engineer",
-      "Mixing Engineer",
-    ],
+    // Tech job categories
+    "frontend-development": ["Frontend Developer", "React Developer", "Vue Developer", "Angular Developer"],
+    "backend-development": ["Backend Developer", "Node.js Developer", "Python Developer", "Java Developer"],
+    "fullstack-development": ["Fullstack Developer", "Full Stack Engineer"],
+    "devops": ["DevOps Engineer", "Site Reliability Engineer", "Infrastructure Engineer"],
+    "data-science": ["Data Scientist", "Machine Learning Engineer", "Data Analyst"],
+    "mobile-development": ["Mobile Developer", "iOS Developer", "Android Developer", "Flutter Developer"],
+    "qa-testing": ["QA Engineer", "Test Engineer", "Automation Engineer"],
+    "product-management": ["Product Manager", "Technical Product Manager"],
+    "ux-ui": ["UX Designer", "UI Designer", "Product Designer"],
+    "security": ["Security Engineer", "Application Security Engineer", "Cybersecurity Analyst"],
+    "database-administration": ["Database Administrator", "DBA", "Data Engineer"],
 
     // Design categories
     "Architecture Design Services": [

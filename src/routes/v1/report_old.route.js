@@ -61,7 +61,7 @@ router.post('/blog/:blogId', auth(), validate(reportValidation.createBlogReport)
  *         name: type
  *         schema:
  *           type: string
- *           enum: [user, music, lyrics, assets, job, blog]
+ *           enum: [user, job, blog, gig]
  *         description: Filter by report type
  *     responses:
  *       "200":

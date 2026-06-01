@@ -1,8 +1,5 @@
 const User = require('../models/user.model');
 const UserSpace = require('../models/userSpace.model');
-const Music = require('../models/music.model');
-const LyricsMusic = require('../models/lyrics.model');
-const ShareMusicAsset = require('../models/shareMusicAsset.model');
 const Job = require('../models/job.model');
 const AppliedJobs = require('../models/appliedJobs.model');
 const Chat = require('../models/chat.model');
@@ -10,15 +7,11 @@ const Order = require('../models/order.model');
 const Gig = require('../models/gig.model');
 const { Blog } = require('../models');
 const Transaction = require('../models/transaction.model');
-const Cart = require('../models/cart.model');
 const ContactUs = require('../models/contactUs.model');
 const Purchase = require('../models/purchase.model');
 const Report = require('../models/report.model');
 const Sale = require('../models/sale.model');
-const ShareMusicCreation = require('../models/shareMusicCreation.model');
 const Token = require('../models/token.model');
-const TrackChunks = require('../models/trackChunks.model');
-const TrackFiles = require('../models/trackFiles.model');
 
 /**
  * Service for handling account cleanup and data deletion
@@ -81,15 +74,6 @@ class AccountCleanupService {
 
       // Delete user's content
       await Promise.all([
-        // Delete user's music
-        Music.deleteMany({ createdBy: userId }),
-        
-        // Delete user's lyrics
-        LyricsMusic.deleteMany({ createdBy: userId }),
-        
-        // Delete user's shared assets
-        ShareMusicAsset.deleteMany({ createdBy: userId }),
-        
         // Delete user's jobs
         Job.deleteMany({ createdBy: userId }),
         
@@ -105,14 +89,11 @@ class AccountCleanupService {
         // Delete user's transactions
         Transaction.deleteMany({ userId: userId }),
         
-        // Delete user's cart items
-        Cart.deleteMany({ userId: userId }),
-        
         // Delete user's contact us messages
         ContactUs.deleteMany({ userId: userId }),
         
         // Delete user's purchases
-        Purchase.deleteMany({ userId: userId }),
+        Purchase.deleteMany({ user: userId }),
         
         // Delete user's sales
         Sale.deleteMany({ sellerId: userId }),
@@ -125,17 +106,8 @@ class AccountCleanupService {
           ]
         }),
         
-        // Delete user's share music creations
-        ShareMusicCreation.deleteMany({ createdBy: userId }),
-        
         // Delete user's tokens
         Token.deleteMany({ userId: userId }),
-        
-        // Delete user's track chunks
-        TrackChunks.deleteMany({ userId: userId }),
-        
-        // Delete user's track files
-        TrackFiles.deleteMany({ userId: userId }),
         
         // Delete chats involving this user
         Chat.deleteMany({ 
@@ -175,34 +147,10 @@ class AccountCleanupService {
           { $pull: { following: userId } }
         ),
         
-        // Remove user from other users' likedSongs
-        User.updateMany(
-          { likedSongs: userId },
-          { $pull: { likedSongs: userId } }
-        ),
-        
         // Remove user from other users' blockedUsers
         User.updateMany(
           { blockedUsers: userId },
           { $pull: { blockedUsers: userId } }
-        ),
-        
-        // Remove user from music likes
-        Music.updateMany(
-          { likes: userId },
-          { $pull: { likes: userId } }
-        ),
-        
-        // Remove user from lyrics likes
-        LyricsMusic.updateMany(
-          { likes: userId },
-          { $pull: { likes: userId } }
-        ),
-        
-        // Remove user from shared assets likes
-        ShareMusicAsset.updateMany(
-          { likes: userId },
-          { $pull: { likes: userId } }
         ),
         
         // Delete applied jobs
@@ -234,12 +182,6 @@ class AccountCleanupService {
         
         // Remove user from blog likes
         Blog.updateMany(
-          { likes: userId },
-          { $pull: { likes: userId } }
-        ),
-        
-        // Remove user from share music creation likes
-        ShareMusicCreation.updateMany(
           { likes: userId },
           { $pull: { likes: userId } }
         ),

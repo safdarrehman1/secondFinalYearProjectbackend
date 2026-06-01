@@ -88,7 +88,7 @@ const postJob = async (body) => {
 };
 
 /**
- * Query for music box
+ * Query for jobs
  * @param {Object} filter - Mongo filter
  * @param {Object} options - Query options
  * @param {string} [options.sortBy] - Sort option in the format: sortField:(desc|asc)
@@ -106,7 +106,7 @@ const getJobs = async (page, limit) => {
 
   const jobs = await Job.find()
     .select(
-      "applicantName applicantAvata status createdOn applicantBackgroundImage applicantSelectedSongs budget category createdAt createdBy cultureArea description isHaveLyric id lyricLanguage musicUse preferredLocation projectTitle timeFrame savedBy position designCategory designSubcategory jobType applications",
+      "applicantName applicantAvata status createdOn applicantBackgroundImage budget category createdAt createdBy cultureArea description id preferredLocation projectTitle timeFrame savedBy position designCategory designSubcategory jobType applications",
     )
     .skip(skip)
     .limit(limit)
@@ -163,7 +163,6 @@ const getJobById = async (id) => {
 
 const ChatService = require("./chat.service");
 const userStatsService = require("./userStats.service");
-const ShareMusicCreation = require("../models/shareMusicCreation.model");
 
 /**
  * Apply a job
@@ -188,41 +187,6 @@ const applyJob = async (body) => {
         createdBy: applicantIdStr,
       }).lean();
 
-      // Top 3 most-liked works (ShareMusicCreation) with normalized fields for the card
-      const popularWorksRaw = applicantIdStr
-        ? await ShareMusicCreation.aggregate([
-            { $match: { createdBy: applicantIdStr } },
-            {
-              $project: {
-                _id: 1,
-                title: 1,
-                songName: "$title",
-                workImages: 1,
-                likesCount: { $size: { $ifNull: ["$likes", []] } },
-                createdAt: 1,
-              },
-            },
-            { $sort: { likesCount: -1, createdAt: -1 } },
-            { $limit: 3 },
-          ])
-        : [];
-
-      const popularWorks = (popularWorksRaw || []).map((w) => ({
-        _id: w._id,
-        title: w.title,
-        songName: w.songName || w.title,
-        thumbnailUrl:
-          Array.isArray(w.workImages) && w.workImages.length > 0
-            ? w.workImages[0]
-            : null,
-        // Backward compatibility: existing frontend reads workImages?.[0]
-        workImages:
-          Array.isArray(w.workImages) && w.workImages.length > 0
-            ? [w.workImages[0]]
-            : [],
-        likesCount: w.likesCount || 0,
-      }));
-
       const totalLikes = await userStatsService.calculateTotalLikes(body.createdBy);
 
       const fullName = userSpace
@@ -232,7 +196,6 @@ const applyJob = async (body) => {
       const cardData = {
         type: "jobApplication",
         jobId: body.jobId,
-        musicIds: body.musicIds || [],
         applicant: {
           id: applicant._id,
           name: fullName,
@@ -244,7 +207,6 @@ const applyJob = async (body) => {
           totalLikes,
           totalCollect: userSpace?.totalCollect || 0,
           creationOccupation: userSpace?.creationOccupation || [],
-          popularWorks,
           coverUrl: userSpace?.coverUrl,
           aboutMe: userSpace?.aboutMe || "",
         },
@@ -312,7 +274,7 @@ const getMyJobs = async (userId, page, limit) => {
 
   const jobs = await Job.find({ createdBy: userId })
     .select(
-      "applicantName applicantAvata status createdOn applicantBackgroundImage applicantSelectedSongs budget category createdAt createdBy cultureArea description isHaveLyric id lyricLanguage musicUse preferredLocation projectTitle timeFrame savedBy expiresAt isFreeExtensionUsed",
+      "applicantName applicantAvata status createdOn applicantBackgroundImage budget category createdAt createdBy cultureArea description id preferredLocation projectTitle timeFrame savedBy expiresAt isFreeExtensionUsed",
     )
     .skip(skip)
     .limit(limit)
@@ -343,7 +305,7 @@ const getMyJobs2 = async (userId, page, limit) => {
 
   const jobs = await Job.find({ createdBy: userId })
     .select(
-      "applicantName applicantAvata status createdOn applicantBackgroundImage applicantSelectedSongs budget category createdAt createdBy cultureArea description isHaveLyric id lyricLanguage musicUse preferredLocation projectTitle timeFrame savedBy designCategory",
+      "applicantName applicantAvata status createdOn applicantBackgroundImage budget category createdAt createdBy cultureArea description id preferredLocation projectTitle timeFrame savedBy designCategory",
     )
     .skip(skip)
     .limit(limit)

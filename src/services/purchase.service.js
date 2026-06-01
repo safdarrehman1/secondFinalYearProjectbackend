@@ -1,8 +1,7 @@
 const httpStatus = require("http-status");
-const { Purchase, ShareMusicAsset, User, Sale } = require("../models");
+const { Purchase, Sale } = require("../models");
 const ApiError = require("../utils/ApiError");
 const moment = require("moment");
-const crypto = require("crypto");
 const mongoose = require("mongoose");
 
 /**
@@ -94,17 +93,6 @@ const getPurchaseHistory = async (userId, filter = {}, options = {}) => {
     // Get purchases dengan populate
     const purchases = await Purchase.find(query)
       .populate({
-        path: "music",
-        select:
-          "songName assetImages music personalUsePrice commercialUsePrice myRole musicUsage musicStyle createdBy title uploadAsset", // Removed musicImage, added assetImages
-        populate: {
-          path: "createdBy",
-          select: "name email profilePicture", // Added profilePicture
-        },
-        // Handle case where music document might be deleted
-        match: { _id: { $exists: true } },
-      })
-      .populate({
         path: "recipient",
         select: "name profilePicture",
       })
@@ -127,52 +115,41 @@ const getPurchaseHistory = async (userId, filter = {}, options = {}) => {
     if (purchases.length > 0) {
       console.log("Sample purchase structure:", {
         id: purchases[0]._id,
-        hasMusic: !!purchases[0].music,
-        musicId: purchases[0].music?._id,
-        musicTitle: purchases[0].music?.songName,
-        hasCreatedBy: !!purchases[0].music?.createdBy,
-        creatorName: purchases[0].music?.createdBy?.name,
+        type: purchases[0].type,
+        projectId: purchases[0].projectId?._id,
+        recipientId: purchases[0].recipient?._id,
       });
     }
 
-    // Search by music/asset name after populate (jika ada search)
+    // Search by project title or recipient name
     let filteredPurchases = purchases;
     if (search) {
       filteredPurchases = purchases.filter((purchase) => {
-        const songName = purchase.music?.songName || "";
-        return songName.toLowerCase().includes(search.toLowerCase());
+        const projectTitle = purchase.projectId?.projectTitle || "";
+        const recipientName = purchase.recipient?.name || "";
+        return (
+          projectTitle.toLowerCase().includes(search.toLowerCase()) ||
+          recipientName.toLowerCase().includes(search.toLowerCase())
+        );
       });
     }
 
     // Transform data for response
     const results = filteredPurchases.map((purchase) => {
-      // Safely handle music data
-      const musicData = purchase.music || {};
-      const creatorData = musicData.createdBy || {};
-      const myRole = Array.isArray(musicData.myRole) ? musicData.myRole : [];
-
-      const assetImages = musicData.assetImages || [];
-      // Use project title if type is project
-      let assetTitle = musicData.title || musicData.songName || "Unknown Item";
-      let assetType = myRole.length > 0 ? myRole.join(", ") : "Unknown";
-      let creatorName = creatorData.name || "Unknown Creator";
-      let creatorImage = creatorData.profilePicture || null;
-      let primaryImage = assetImages.length > 0 ? assetImages[0] : null;
+      let assetTitle = "Unknown Item";
+      let assetType = "Unknown";
+      let creatorName = "-";
+      let creatorImage = null;
+      let primaryImage = null;
 
       if (purchase.type === "project") {
         assetTitle = purchase.projectId?.projectTitle || "Project Creation";
         assetType = "Project";
-        creatorName = "-"; // As requested
-        creatorImage = null;
-        primaryImage = null; // Or a specific icon for projects
       } else if (purchase.type === "project_extension") {
         assetTitle = purchase.projectId?.projectTitle
           ? `${purchase.projectId.projectTitle}`
           : "Project Extension";
         assetType = "Project Extension";
-        creatorName = "-";
-        creatorImage = null;
-        primaryImage = null;
       } else if (purchase.type === "sponsor") {
         assetTitle = "Sponsorship";
         assetType = "Sponsor";
@@ -182,38 +159,23 @@ const getPurchaseHistory = async (userId, filter = {}, options = {}) => {
 
       return {
         id: purchase._id,
-        assetId: musicData._id || purchase.projectId?._id || null,
+        assetId: purchase.projectId?._id || purchase.recipient?._id || null,
         assetTitle: assetTitle,
-        assetImage: primaryImage || musicData.musicImage || null, // Fallback to musicImage just in case
+        assetImage: primaryImage,
         assetType: assetType,
         creatorName: creatorName,
-        creatorId: creatorData._id || null,
+        creatorId: purchase.recipient?._id || null,
         creatorImage: creatorImage, // Added creator image
         purchaseDate: purchase.createdAt,
-        type: purchase.type || "music", // Add type
+        type: purchase.type || "project", // Add type
         amount: purchase.amount || 0,
         totalAmount: purchase.amount || 0,
         status: purchase.status || "unknown",
         paymentMethod: purchase.paymentMethod || "unknown",
         paymentId: purchase.squarePaymentId || null,
-        licenseType: purchase.licenseType || "unknown",
-        licenseId: purchase.licenseId || null,
         transactionId: purchase.transactionId || null,
-        downloadCount: purchase.downloadCount || 0,
-        downloadLimit: 10,
-        canDownload:
-          (purchase.downloadCount || 0) < 10 &&
-          purchase.status === "completed" &&
-          purchase.type === "music", // Only music is downloadable
-        musicFile: musicData.uploadAsset || null,
-        assetDetails: {
-          musicUsage: Array.isArray(musicData.musicUsage)
-            ? musicData.musicUsage
-            : [],
-          musicStyle: musicData.musicStyle || "",
-          personalUsePrice: musicData.personalUsePrice || "",
-          commercialUsePrice: musicData.commercialUsePrice || "",
-        },
+        canDownload: false,
+        assetDetails: {},
       };
     });
 
@@ -257,13 +219,12 @@ const getPurchaseDetails = async (purchaseId, userId) => {
   try {
     const purchase = await Purchase.findOne({ _id: purchaseId, user: userId })
       .populate({
-        path: "music",
-        select:
-          "songName musicImage music personalUsePrice commercialUsePrice myRole musicUsage musicStyle description tags createdBy",
-        populate: {
-          path: "createdBy",
-          select: "name email",
-        },
+        path: "projectId",
+        select: "projectTitle",
+      })
+      .populate({
+        path: "recipient",
+        select: "name email profilePicture",
       })
       .populate({
         path: "user",
@@ -275,37 +236,38 @@ const getPurchaseDetails = async (purchaseId, userId) => {
       throw new ApiError(httpStatus.NOT_FOUND, "Purchase not found");
     }
 
+    let assetTitle = "Unknown Item";
+    let assetType = "Unknown";
+    if (purchase.type === "project") {
+      assetTitle = purchase.projectId?.projectTitle || "Project Creation";
+      assetType = "Project";
+    } else if (purchase.type === "project_extension") {
+      assetTitle = purchase.projectId?.projectTitle
+        ? `${purchase.projectId.projectTitle}`
+        : "Project Extension";
+      assetType = "Project Extension";
+    } else if (purchase.type === "sponsor") {
+      assetTitle = "Sponsorship";
+      assetType = "Sponsor";
+    }
+
     return {
       id: purchase._id,
-      assetId: purchase.music?._id,
-      assetTitle: purchase.music?.songName || "Unknown Song",
-      assetImage: purchase.music?.musicImage,
-      assetDescription: purchase.music?.description,
-      assetTags: purchase.music?.tags,
-      creatorName: purchase.music?.createdBy?.name || "Unknown Creator",
-      creatorId: purchase.music?.createdBy?._id,
-      creatorEmail: purchase.music?.createdBy?.email,
+      assetId: purchase.projectId?._id || purchase.recipient?._id || null,
+      assetTitle,
+      assetType,
+      creatorName: purchase.recipient?.name || "-",
+      creatorId: purchase.recipient?._id || null,
+      creatorEmail: purchase.recipient?.email || null,
       purchaseDate: purchase.createdAt,
       amount: purchase.amount,
       totalAmount: purchase.amount,
       status: purchase.status,
       paymentMethod: purchase.paymentMethod,
       paymentId: purchase.squarePaymentId,
-      licenseType: purchase.licenseType,
-      licenseId: purchase.licenseId,
       transactionId: purchase.transactionId,
-      downloadCount: purchase.downloadCount || 0,
-      downloadLimit: 10,
-      canDownload:
-        (purchase.downloadCount || 0) < 10 && purchase.status === "completed",
-      musicFile: purchase.music?.music,
-      assetDetails: {
-        musicUsage: purchase.music?.musicUsage,
-        musicStyle: purchase.music?.musicStyle,
-        personalUsePrice: purchase.music?.personalUsePrice,
-        commercialUsePrice: purchase.music?.commercialUsePrice,
-        myRole: purchase.music?.myRole,
-      },
+      canDownload: false,
+      assetDetails: {},
       metadata: purchase.metadata,
     };
   } catch (error) {
@@ -324,59 +286,8 @@ const getPurchaseDetails = async (purchaseId, userId) => {
  * @param {string} userId - User ID
  * @returns {Promise<Object>}
  */
-const generateDownloadUrl = async (purchaseId, userId) => {
-  try {
-    const purchase = await Sale.findOne({
-      _id: purchaseId,
-      buyerId: userId,
-    }).populate("assetId", "music songName");
-
-    if (!purchase) {
-      throw new ApiError(httpStatus.NOT_FOUND, "Purchase not found");
-    }
-
-    if (purchase.status !== "completed") {
-      throw new ApiError(httpStatus.BAD_REQUEST, "Purchase not completed");
-    }
-
-    if (purchase.downloadCount >= purchase.downloadLimit) {
-      throw new ApiError(httpStatus.BAD_REQUEST, "Download limit exceeded");
-    }
-
-    // Generate secure token for download
-    const token = crypto.randomBytes(32).toString("hex");
-    const expiresAt = moment().add(1, "hours").toDate(); // URL expires in 1 hour
-
-    const downloadUrl = {
-      url: `/api/v1/purchases/${purchaseId}/download/${token}`,
-      expiresAt,
-      createdAt: new Date(),
-    };
-
-    // Add to download URLs and increment count
-    purchase.downloadUrls.push(downloadUrl);
-    purchase.downloadCount += 1;
-    await purchase.save();
-
-    return {
-      downloadUrl: downloadUrl.url,
-      expiresAt: downloadUrl.expiresAt,
-      filename: purchase.assetId?.songName || "music_file",
-      downloadCount: purchase.downloadCount,
-      downloadLimit: purchase.downloadLimit,
-      remainingDownloads: purchase.downloadLimit - purchase.downloadCount,
-    };
-  } catch (error) {
-    if (error instanceof ApiError) throw error;
-    throw new ApiError(
-      httpStatus.INTERNAL_SERVER_ERROR,
-      "Error generating download URL",
-    );
-  }
-};
-
 /**
- * Get sales data for music creators
+ * Get sales data for sponsors/creators
  * @param {string} userId - Creator user ID
  * @param {Object} filter - Search and filter options
  * @param {Object} options - Pagination options
@@ -398,7 +309,7 @@ const getSalesData = async (userId, filter = {}, options = {}) => {
   // Build query for sales where user is the owner/creator
   const query = { OwnerId: userId };
 
-  // Search by music/asset name or buyer name
+  // Search by asset name or buyer name
   if (search) {
     query.$or = [
       { assetTitle: { $regex: search, $options: "i" } },
@@ -446,11 +357,6 @@ const getSalesData = async (userId, filter = {}, options = {}) => {
     const [sales, totalResults] = await Promise.all([
       Sale.find(query)
         .populate({
-          path: "assetId",
-          select:
-            "title songName assetImages musicImage myRole musicUsage musicStyle",
-        })
-        .populate({
           path: "buyerId",
           select: "name email profilePicture",
         })
@@ -467,34 +373,26 @@ const getSalesData = async (userId, filter = {}, options = {}) => {
 
     // Transform data for response
     const results = sales.map((sale) => {
-      const assetData = sale.assetId || {};
       const buyerData = sale.buyerId || {};
-
-      const assetImages = assetData.assetImages || [];
-      const primaryImage = assetImages.length > 0 ? assetImages[0] : null;
 
       let assetType = "Unknown";
       if (sale.type === "sponsor") {
         assetType = "Sponsorship";
-      } else if (Array.isArray(assetData.myRole)) {
-        assetType = assetData.myRole.join(", ");
+      } else if (sale.type === "project") {
+        assetType = "Project";
       }
 
       return {
         id: sale._id,
-        assetId: assetData._id || sale.assetId,
-        assetTitle:
-          assetData.title ||
-          assetData.songName ||
-          sale.assetTitle ||
-          "Unknown Asset",
-        assetImage: primaryImage || assetData.musicImage || null,
+        assetId: sale.assetId || null,
+        assetTitle: sale.assetTitle || "Unknown Asset",
+        assetImage: null,
         assetType,
         buyerName: buyerData.name || sale.buyer || "Unknown Buyer",
         buyerId: buyerData._id || sale.buyerId,
         buyerEmail: buyerData.email,
         buyerImage: buyerData.profilePicture || null,
-        sellerName: sale.OwnerId?.name || "Unknown Artist",
+        sellerName: sale.OwnerId?.name || "Unknown Seller",
         saleDate: sale.createdAt,
         amount: sale.assetPrice || 0,
         quantity: sale.quantity || 1,
@@ -552,6 +450,5 @@ const getSalesData = async (userId, filter = {}, options = {}) => {
 module.exports = {
   getPurchaseHistory,
   getPurchaseDetails,
-  generateDownloadUrl,
   getSalesData,
 };

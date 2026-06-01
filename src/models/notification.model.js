@@ -29,8 +29,6 @@ const notificationSchema = mongoose.Schema(
         "order_review",
         "review_reply",
         "support_requested",
-        "music_purchase",
-        "music_sale",
       ],
     },
     receiver: {

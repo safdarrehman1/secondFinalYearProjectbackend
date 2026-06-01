@@ -301,7 +301,7 @@ const getDefaultDeliverablesByCategory = (category = '', subcategory = '') => {
     };
   }
 
-  // Default/Fallback for Music Services or others
+  // Default fallback for other services.
   return {
     deliveryTime: { 
       label: 'Delivery Time', 

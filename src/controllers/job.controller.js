@@ -3,7 +3,7 @@ const pick = require("../utils/pick");
 const regexFilter = require("../utils/regexFilter");
 const ApiError = require("../utils/ApiError");
 const catchAsync = require("../utils/catchAsync");
-const { jobService, musicService } = require("../services");
+const { jobService } = require("../services");
 const { Job } = require("../models");
 const chatController = require("./chat.controller"); // Import chat controller
 const User = require("../models/user.model"); // Import User model
@@ -154,17 +154,6 @@ const applyJob = catchAsync(async (req, res) => {
       message: "You already applied to this job",
     });
   }
-
-  // var musicData = [];
-
-  // // Verify all music IDs exist
-  // for (const musicId of payload.musicIds) {
-  //   const music = await musicService.getMusicById(musicId);
-  //   if (!music) {
-  //     throw new ApiError(httpStatus.NOT_FOUND, 'There is some Music that cannot be found');
-  //   }
-  //   musicData.push(music);
-  // }
 
   // Apply for the job
   const appliedJob = await jobService.applyJob(payload);

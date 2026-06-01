@@ -1,8 +1,6 @@
 const Report = require("../models/report.model");
 const {
   User,
-  ShareMusicCreation,
-  ShareMusicAsset,
   Job,
   Blog,
   Gig,
@@ -20,18 +18,6 @@ const populateReportData = async (reports) => {
             reportedItem = await User.findById(report.reportedId).select(
               "name email",
             );
-            break;
-          case "music":
-          case "shareMusicCreation":
-            reportedItem = await ShareMusicCreation.findById(
-              report.reportedId,
-            ).select("title musicName");
-            break;
-          case "assets":
-          case "shareMusicAsset":
-            reportedItem = await ShareMusicAsset.findById(
-              report.reportedId,
-            ).select("title");
             break;
           case "job":
             reportedItem = await Job.findById(report.reportedId).select(
@@ -67,7 +53,6 @@ const populateReportData = async (reports) => {
           reportedItem.name ||
           reportedItem.title ||
           reportedItem.projectTitle ||
-          reportedItem.musicName ||
           "Unknown Item";
       }
 

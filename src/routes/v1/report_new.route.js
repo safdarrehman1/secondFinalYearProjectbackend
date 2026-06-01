@@ -51,12 +51,6 @@ router.post(
   validate(reportValidation.createBlogReport),
   reportController.createBlogReport,
 );
-router.post(
-  "/comment/:commentId",
-  auth(),
-  validate(reportValidation.createCommentReport),
-  reportController.createCommentReport,
-);
 
 /**
  * @swagger
@@ -72,7 +66,7 @@ router.post(
  *         name: type
  *         schema:
  *           type: string
- *           enum: [user, music, lyrics, assets, job, blog]
+ *           enum: [user, job, blog, gig]
  *         description: Filter by report type
  *     responses:
  *       "200":

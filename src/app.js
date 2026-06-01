@@ -14,7 +14,6 @@ const { authLimiter } = require("./middlewares/rateLimiter");
 const routes = require("./routes/v1");
 const { errorConverter, errorHandler } = require("./middlewares/error");
 const ApiError = require("./utils/ApiError");
-const cartRoute = require("./routes/v1/cart.route");
 const AttachmentCleanupService = require("./services/attachmentCleanup.service");
 
 const app = express();
@@ -82,7 +81,7 @@ app.use((req, res, next) => {
 app.use("/v1", routes);
 
 app.get("/", (req, res) => {
-  res.send("Welcome! Backend Music App Running Normaly. v4");
+  res.send("Welcome! Backend Tech Hiring App Running Normally. v4");
 });
 
 // Initialize attachment cleanup scheduler (moved to index.js after DB connect)
@@ -92,7 +91,6 @@ app.get("/", (req, res) => {
 app.use((req, res, next) => {
   next(new ApiError(httpStatus.NOT_FOUND, "Not found"));
 });
-app.use("/v1/cart", cartRoute);
 
 // convert error to ApiError, if needed
 app.use(errorConverter);

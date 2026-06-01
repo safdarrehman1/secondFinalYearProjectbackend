@@ -4,24 +4,13 @@ const reportSchema = new mongoose.Schema({
   userId: { type: mongoose.Schema.Types.ObjectId, required: true, ref: "User" },
   type: {
     type: String,
-    enum: [
-      "user",
-      "music",
-      "lyrics",
-      "assets",
-      "job",
-      "blog",
-      "comment",
-      "shareMusicCreation",
-      "shareMusicAsset",
-      "gig",
-    ],
+    enum: ["user", "job", "blog", "gig"],
     required: true,
   },
   reportedId: {
     type: mongoose.Schema.Types.ObjectId,
     required: true,
-  }, // ID of the reported item (user, music, lyrics, blog, comment, etc.)
+  }, // ID of the reported item
   reportedUserId: {
     type: mongoose.Schema.Types.ObjectId,
     required: true,

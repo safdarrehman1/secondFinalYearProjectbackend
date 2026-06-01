@@ -38,12 +38,6 @@ const userSchema = mongoose.Schema(
       private: true, // used by the toJSON plugin
     },
     following: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
-    likedSongs: [
-      {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "Music", // Reference to the Music model
-      },
-    ],
     blockedUsers: [
       {
         type: mongoose.Schema.Types.ObjectId,

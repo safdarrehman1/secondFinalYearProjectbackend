@@ -5,12 +5,12 @@ const saleSchema = new mongoose.Schema(
   {
     type: {
       type: String,
-      enum: ["music", "project", "sponsor"],
-      default: "music",
+      enum: ["project", "sponsor"],
+      default: "project",
     },
     assetId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "ShareMusicAsset", // Keep same reference for backward compatibility
+      ref: "Job",
       required: false,
     },
     OwnerId: {
@@ -61,21 +61,6 @@ const saleSchema = new mongoose.Schema(
       enum: ["pending", "completed", "failed", "refunded"],
       default: "completed",
     },
-    downloadCount: {
-      type: Number,
-      default: 0,
-    },
-    downloadLimit: {
-      type: Number,
-      default: 10, // Max downloads allowed
-    },
-    downloadUrls: [
-      {
-        url: String,
-        expiresAt: Date,
-        createdAt: { type: Date, default: Date.now },
-      },
-    ],
     created_at: {
       type: Date,
       default: Date.now,
@@ -83,8 +68,6 @@ const saleSchema = new mongoose.Schema(
   },
   { timestamps: true },
 );
-
-module.exports = mongoose.model("Sale", saleSchema);
 
 // add plugin that converts mongoose to json
 saleSchema.plugin(toJSON);

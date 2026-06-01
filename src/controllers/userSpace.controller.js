@@ -3,10 +3,6 @@ const catchAsync = require("../utils/catchAsync");
 const ApiError = require("../utils/ApiError");
 const { userSpaceService, userStatsService } = require("../services");
 const fs = require("fs");
-const Music = require("../models/music.model");
-const LyricsMusic = require("../models/lyrics.model");
-const ShareMusicAsset = require("../models/shareMusicAsset.model");
-const ShareMusicCreation = require("../models/shareMusicCreation.model");
 const User = require("../models/user.model");
 const uploadCover = require("./uploadCover.controller");
 const RatingService = require("../services/rating.service");
@@ -119,37 +115,12 @@ const getSpace = catchAsync(async (req, res) => {
   }
   result = result && result.toObject ? result.toObject() : result;
 
-  // Same source of truth as profile: userStatsService (Music, Lyrics, ShareMusicCreation string createdBy; ShareMusicAsset, Gig ObjectId)
+  // Same source of truth as profile: userStatsService
   const userId = req.user.id;
   result.totalLikes = await userStatsService.calculateTotalLikes(userId);
 
-  // Optimize totalCollect calculation
-  // First get all asset IDs created by the user (only IDs, lean query)
-  const [musicIds, lyricsIds, shareAssetsIds] = await Promise.all([
-    Music.find({ createdBy: userId }).distinct("_id"),
-    LyricsMusic.find({ createdBy: userId }).distinct("_id"),
-    ShareMusicAsset.find({ createdBy: userId }).distinct("_id"),
-  ]);
-
-  const allWorkIds = [...musicIds, ...lyricsIds, ...shareAssetsIds].map((id) =>
-    id.toString(),
-  ); // Ensure they are strings for comparison if mixed types exist
-
-  // Use MongoDB countDocuments with $in operator instead of fetching all users
-  // This is heavily optimized compared to iterating users in JS
-  let totalCollect = 0;
-  if (allWorkIds.length > 0) {
-    // NOTE: User.collections can be Mixed type, storing ObjectIds as strings or ObjectIds
-    // We check for both strictly if possible, or reliance on $in finding them
-    // Since previous code used .toString(), we assume they might be stored variously
-    // A simple $in query on the 'collections' array field works efficiently if indexed
-    totalCollect = await User.countDocuments({
-      collections: { $in: allWorkIds },
-    });
-  }
-
   result.country = result.address ? result.address.split(",")[0] : "";
-  result.totalCollect = totalCollect;
+  result.totalCollect = 0;
 
   // Followers: real count + virtual (1–2 added per user per day by cron)
   const [followersCount, userDoc] = await Promise.all([
