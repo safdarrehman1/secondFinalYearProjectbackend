@@ -10,6 +10,7 @@ const User = require("../models/user.model"); // Import User model
 const ChatService = require("../services/chat.service"); // Import ChatService
 const UserSpace = require("../models/userSpace.model"); // Import UserSpace model
 const reportService = require("../services/report.service");
+const { verifyResumeAnalysisToken } = require("./ai.controller");
 //const upload = require('../config/multer');
 
 const postJob = catchAsync(async (req, res) => {
@@ -139,10 +140,28 @@ const getJobById = catchAsync(async (req, res) => {
 });
 
 const applyJob = catchAsync(async (req, res) => {
+  let resumeAnalysis;
+  try {
+    resumeAnalysis = verifyResumeAnalysisToken(
+      req.body.applyJob.resumeAnalysisToken,
+      req.user.id,
+      req.body.applyJob.jobId,
+    );
+  } catch (_) {
+    throw new ApiError(
+      httpStatus.FORBIDDEN,
+      "Your resume must receive an AI match score above 60% before you can apply.",
+    );
+  }
+
   const payload = {
     ...req.body.applyJob,
+    resumeMatchScore: resumeAnalysis.score,
+    resumeMatchSuggestion: resumeAnalysis.suggestion,
+    missingSkills: resumeAnalysis.missingSkills,
     createdBy: req.user.id, // Associate the application with the current user
   };
+  delete payload.resumeAnalysisToken;
   // Check if the user has already applied for the job
   const existingApplication = await jobService.getApplicationByJobIdAndUserId(
     req.body.applyJob.jobId,

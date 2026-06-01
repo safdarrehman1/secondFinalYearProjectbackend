@@ -5,6 +5,7 @@ const {
 } = require("@aws-sdk/client-s3");
 const multer = require("multer");
 const path = require("path");
+const fs = require("fs").promises;
 const { PassThrough } = require("stream");
 
 // AWS SDK v3 setup
@@ -32,6 +33,7 @@ async function uploadFileToS3(file, userId = "anonymous") {
   const fileExt = path.extname(file.originalname);
   let folder = "job-assets/others";
 
+  if (file.fieldname === "profilePicture") folder = "uploads/profile-pictures";
   if (file.fieldname === "jobImage") folder = "job-assets/images";
   if (file.fieldname === "jobFile") folder = "job-assets/files";
   if (file.fieldname === "jobBackground") folder = "job-assets/backgrounds";
@@ -41,8 +43,25 @@ async function uploadFileToS3(file, userId = "anonymous") {
   )
     folder = "uploads/cancellation-attachments";
 
-  const filename = `${Date.now()}-${file.originalname}`;
+  const filename = `${Date.now()}-${path.basename(file.originalname)}`;
   const key = `${folder}/${userId}/${filename}`;
+
+  if (
+    !process.env.AWS_ACCESS_KEY_ID ||
+    !process.env.AWS_SECRET_ACCESS_KEY ||
+    !process.env.AWS_BUCKET_NAME ||
+    !process.env.AWS_REGION
+  ) {
+    const localPath = path.join(__dirname, "../../public", ...key.split("/"));
+    await fs.mkdir(path.dirname(localPath), { recursive: true });
+    await fs.writeFile(localPath, file.buffer);
+    const baseUrl = process.env.BACKEND_URL || process.env.BASE_URL || `http://localhost:${process.env.PORT || 3000}`;
+
+    return {
+      url: `${baseUrl.replace(/\/$/, "")}/${key}`,
+      key,
+    };
+  }
 
   const uploadParams = {
     Bucket: process.env.AWS_BUCKET_NAME,

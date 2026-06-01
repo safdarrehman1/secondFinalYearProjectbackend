@@ -5,6 +5,8 @@ const userSpaceRoute = require('./userSpace.route');
 const jobsRoute = require('./job.route');
 const chatRoutes = require('./chat.route');
 const aiRoute = require('./ai.route');
+const uploadRoute = require('./upload.route');
+const contactUsRoute = require('./contactUs.route');
 const config = require('../../config/config');
 
 const router = express.Router();
@@ -16,6 +18,8 @@ const defaultRoutes = [
   { path: '/job', route: jobsRoute },
   { path: '/chat-system', route: chatRoutes },
   { path: '/ai', route: aiRoute },
+  { path: '/upload', route: uploadRoute },
+  { path: '/contact-us', route: contactUsRoute },
 ];
 
 defaultRoutes.forEach((r) => router.use(r.path, r.route));

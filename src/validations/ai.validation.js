@@ -15,6 +15,13 @@ const generateAutofill = {
   }),
 };
 
+const generateResumeMatch = {
+  body: Joi.object().keys({
+    jobId: Joi.string().required(),
+  }),
+};
+
 module.exports = {
-  generateAutofill
+  generateAutofill,
+  generateResumeMatch,
 };

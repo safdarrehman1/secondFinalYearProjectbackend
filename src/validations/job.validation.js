@@ -57,6 +57,7 @@ const applyJob = {
     applyJob: {
       message: Joi.string().required(),
       jobId: Joi.string().custom(objectId).required(),
+      resumeAnalysisToken: Joi.string().required(),
       name: Joi.string().optional().allow("").min(1, "utf-8").messages({
         "string.empty": '"name" is not allowed to be empty',
       }),

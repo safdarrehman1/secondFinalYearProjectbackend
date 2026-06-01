@@ -21,6 +21,18 @@ const appliedJobSchema = mongoose.Schema(
       ref: 'User',
       required: true,
     },
+    resumeMatchScore: {
+      type: Number,
+      required: true,
+    },
+    resumeMatchSuggestion: {
+      type: String,
+      required: true,
+    },
+    missingSkills: {
+      type: [String],
+      default: [],
+    },
   },
   {
     timestamps: true,
