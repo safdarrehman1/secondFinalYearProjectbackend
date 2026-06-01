@@ -67,13 +67,13 @@ const uploadImage = catchAsync(async (req, res) => {
       responseData = { profilePicture: s3Result.url, userId: user._id };
       message = 'Profile picture uploaded successfully';
       break;
-    case 'musicImage':
-      responseData = { musicImage: s3Result.url };
-      message = 'Music image uploaded successfully';
+    case 'jobImage':
+      responseData = { jobImage: s3Result.url };
+      message = 'Job asset image uploaded successfully';
       break;
-    case 'musicBackground':
-      responseData = { musicBackground: s3Result.url };
-      message = 'Music background uploaded successfully';
+    case 'jobBackground':
+      responseData = { jobBackground: s3Result.url };
+      message = 'Job asset background uploaded successfully';
       break;
     case 'workImage':
       responseData = { workImage: s3Result.url };

@@ -3,13 +3,14 @@ const pick = require("../utils/pick");
 const regexFilter = require("../utils/regexFilter");
 const ApiError = require("../utils/ApiError");
 const catchAsync = require("../utils/catchAsync");
-const { jobService, musicService } = require("../services");
+const { jobService } = require("../services");
 const { Job } = require("../models");
 const chatController = require("./chat.controller"); // Import chat controller
 const User = require("../models/user.model"); // Import User model
 const ChatService = require("../services/chat.service"); // Import ChatService
 const UserSpace = require("../models/userSpace.model"); // Import UserSpace model
 const reportService = require("../services/report.service");
+const { verifyResumeAnalysisToken } = require("./ai.controller");
 //const upload = require('../config/multer');
 
 const postJob = catchAsync(async (req, res) => {
@@ -139,10 +140,28 @@ const getJobById = catchAsync(async (req, res) => {
 });
 
 const applyJob = catchAsync(async (req, res) => {
+  let resumeAnalysis;
+  try {
+    resumeAnalysis = verifyResumeAnalysisToken(
+      req.body.applyJob.resumeAnalysisToken,
+      req.user.id,
+      req.body.applyJob.jobId,
+    );
+  } catch (_) {
+    throw new ApiError(
+      httpStatus.FORBIDDEN,
+      "Your resume must receive an AI match score above 60% before you can apply.",
+    );
+  }
+
   const payload = {
     ...req.body.applyJob,
+    resumeMatchScore: resumeAnalysis.score,
+    resumeMatchSuggestion: resumeAnalysis.suggestion,
+    missingSkills: resumeAnalysis.missingSkills,
     createdBy: req.user.id, // Associate the application with the current user
   };
+  delete payload.resumeAnalysisToken;
   // Check if the user has already applied for the job
   const existingApplication = await jobService.getApplicationByJobIdAndUserId(
     req.body.applyJob.jobId,
@@ -154,17 +173,6 @@ const applyJob = catchAsync(async (req, res) => {
       message: "You already applied to this job",
     });
   }
-
-  // var musicData = [];
-
-  // // Verify all music IDs exist
-  // for (const musicId of payload.musicIds) {
-  //   const music = await musicService.getMusicById(musicId);
-  //   if (!music) {
-  //     throw new ApiError(httpStatus.NOT_FOUND, 'There is some Music that cannot be found');
-  //   }
-  //   musicData.push(music);
-  // }
 
   // Apply for the job
   const appliedJob = await jobService.applyJob(payload);

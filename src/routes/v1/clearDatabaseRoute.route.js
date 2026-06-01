@@ -1,15 +1,10 @@
 const express = require("express");
-const { Job, LyricsMusic, Music, ShareMusicAsset } = require("../../models");
+const { Job } = require("../../models");
 const router = express.Router();
 
 router.get("/", async (req, res) => {
   try {
-    await Promise.all([
-      Job.deleteMany({}),
-      LyricsMusic.deleteMany({}),
-      Music.deleteMany({}),
-      ShareMusicAsset.deleteMany({}),
-    ]);
+    await Promise.all([Job.deleteMany({})]);
 
     res.json({ message: "All related collections cleared from the database." });
   } catch (error) {

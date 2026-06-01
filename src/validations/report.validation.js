@@ -11,28 +11,10 @@ const createBlogReport = {
   }),
 };
 
-const createCommentReport = {
-  params: Joi.object().keys({
-    commentId: Joi.string().custom(objectId),
-  }),
-  body: Joi.object().keys({
-    reason: Joi.string().optional().trim().max(200),
-    description: Joi.string().optional().trim().max(500),
-    musicId: Joi.string().custom(objectId).required(),
-  }),
-};
 
 const getReports = {
   query: Joi.object().keys({
-    type: Joi.string().valid(
-      "user",
-      "music",
-      "lyrics",
-      "assets",
-      "job",
-      "blog",
-      "comment",
-    ),
+    type: Joi.string().valid("user", "job", "blog", "gig"),
     sortBy: Joi.string(),
     limit: Joi.number().integer().min(1).max(100),
     page: Joi.number().integer().min(1),
@@ -47,7 +29,6 @@ const deleteReport = {
 
 module.exports = {
   createBlogReport,
-  createCommentReport,
   getReports,
   deleteReport,
 };

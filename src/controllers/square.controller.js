@@ -13,7 +13,7 @@ const getFrontendUrl = () => {
   return config.frontend?.url || 
          process.env.FRONTEND_URL || 
          (process.env.NODE_ENV === 'production' 
-           ? 'https://musicapp2025-fe1.vercel.app'
+           ? 'http://localhost:3000'
            : `http://localhost:${process.env.FRONTEND_PORT || '3000'}`);
 };
 
@@ -22,7 +22,7 @@ const getBackendUrl = () => {
   return config.square?.redirectUri?.replace('/v1/square/callback', '') ||
          process.env.BACKEND_URL ||
          (process.env.NODE_ENV === 'production' 
-           ? 'https://musicapp2025-be.vercel.app'
+           ? `http://localhost:${process.env.PORT || '5051'}`
            : `http://localhost:${process.env.PORT || '5051'}`);
 };
 
@@ -548,81 +548,6 @@ const createPayment = catchAsync(async (req, res) => {
   });
 });
 
-/**
- * Create a Square payment for music purchase
- */
-const createMusicPayment = catchAsync(async (req, res) => {
-  const userId = req.user.id;
-  const { musicId, licenseType, licenseId, amount, currency = 'USD' } = req.body;
-
-  if (!musicId || !licenseType || amount === undefined) {
-    throw new ApiError(httpStatus.BAD_REQUEST, 'musicId, licenseType, and amount are required');
-  }
-
-  const isConnected = await squareService.isUserConnected(userId);
-  if (!isConnected) {
-    throw new ApiError(httpStatus.BAD_REQUEST, 'Square account not connected');
-  }
-
-  try {
-    // Create Square payment
-    const paymentData = {
-      sourceId: 'EXTERNAL', // Using balance/external funding
-      idempotencyKey: uuidv4(),
-      amount: Math.round(amount * 100), // Convert to cents
-      currency,
-      note: `Music purchase - License: ${licenseType}`
-    };
-
-    const payment = await squareService.createPayment(userId, paymentData);
-
-    // If payment successful, create purchase record
-    if (payment && payment.status === 'COMPLETED') {
-      const purchaseData = {
-        musicId,
-        amount,
-        currency,
-        paymentMethod: 'square',
-        squarePaymentId: payment.id,
-        licenseType,
-        licenseId,
-        status: 'completed'
-      };
-
-      // Create a mock request object for the purchase controller
-      const purchaseReq = {
-        user: { id: userId },
-        body: purchaseData,
-        headers: req.headers,
-        ip: req.ip
-      };
-
-      const purchaseRes = {
-        status: (statusCode) => ({
-          json: (data) => data
-        }),
-        json: (data) => data
-      };
-
-      // Call purchase controller to create purchase record
-      const purchaseResult = await purchaseController.createPurchase(purchaseReq, purchaseRes);
-      
-      res.status(httpStatus.CREATED).json({
-        message: 'Music purchase completed successfully',
-        payment,
-        purchase: purchaseResult.purchase || purchaseResult
-      });
-    } else {
-      throw new ApiError(httpStatus.PAYMENT_REQUIRED, 'Payment failed');
-    }
-  } catch (error) {
-    if (error.statusCode) {
-      throw error;
-    }
-    throw new ApiError(httpStatus.INTERNAL_SERVER_ERROR, `Payment processing failed: ${error.message}`);
-  }
-});
-
 const getPayment = catchAsync(async (req, res) => {
   const userId = req.user.id;
   const { paymentId } = req.params;
@@ -1047,20 +972,18 @@ const createSimplePayment = catchAsync(async (req, res) => {
     nonce, 
     amount, 
     currency = 'USD', 
-    musicId,
-    songName,
-    licenseType,
-    licenseId,
+    itemId,
+    itemName,
     cardholderName,
     postalCode
   } = req.body;
 
-  console.log('Extracted variables:', { nonce: nonce?.substring(0, 10) + '...', amount, currency, musicId, songName });
+  console.log('Extracted variables:', { nonce: nonce?.substring(0, 10) + '...', amount, currency, itemId, itemName });
 
   // Basic validation
-  if (!nonce || !amount || !musicId) {
-    console.error('Missing required fields:', { nonce: !!nonce, amount: !!amount, musicId: !!musicId });
-    throw new ApiError(httpStatus.BAD_REQUEST, 'nonce, amount, and musicId are required');
+  if (!nonce || !amount || !itemId) {
+    console.error('Missing required fields:', { nonce: !!nonce, amount: !!amount, itemId: !!itemId });
+    throw new ApiError(httpStatus.BAD_REQUEST, 'nonce, amount, and itemId are required');
   }
 
   // Environment validation
@@ -1097,7 +1020,7 @@ const createSimplePayment = catchAsync(async (req, res) => {
       idempotencyKey: uuidv4(),
       amount: Math.round(amount),
       currency,
-      note: `Music Purchase: ${songName} - ${licenseType || 'License'}`
+      note: `Purchase: ${itemName || itemId}`
     };
 
     console.log('Payment data prepared:', {
@@ -1151,10 +1074,8 @@ const createSimplePayment = catchAsync(async (req, res) => {
         status: payment.status,
         createdAt: payment.createdAt,
         receiptUrl: payment.receiptUrl,
-        musicId,
-        songName,
-        licenseType,
-        licenseId
+        itemId,
+        itemName
       }
     });
 
@@ -1199,7 +1120,6 @@ module.exports = {
   updateMerchantInfo,
   createPayment,
   createSimplePayment,
-  createMusicPayment,
   getPayment,
   listPayments,
   testSquareConfig,

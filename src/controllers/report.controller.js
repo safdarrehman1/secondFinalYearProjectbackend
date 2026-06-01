@@ -48,68 +48,6 @@ const createBlogReport = catchAsync(async (req, res) => {
   });
 });
 
-const {
-  ShareMusicAsset,
-  Music,
-  LyricsMusic,
-  ShareMusicCreation,
-} = require("../models");
-
-const createCommentReport = catchAsync(async (req, res) => {
-  const { commentId } = req.params;
-  const { reason, description, musicId } = req.body;
-
-  // Find the comment and its owner across models
-  let data = await Music.findById(musicId);
-  if (!data) data = await LyricsMusic.findById(musicId);
-  if (!data) data = await ShareMusicAsset.findById(musicId);
-  if (!data) data = await ShareMusicCreation.findById(musicId);
-
-  if (!data) {
-    return res.status(httpStatus.NOT_FOUND).json({
-      success: false,
-      message: "Music item not found",
-    });
-  }
-
-  const comment = data.comments.find((c) => c._id.toString() === commentId);
-  if (!comment) {
-    return res.status(httpStatus.NOT_FOUND).json({
-      success: false,
-      message: "Comment not found",
-    });
-  }
-
-  // Check if user already reported this comment
-  const existingReport = await reportService.findReport({
-    userId: req.user.id,
-    type: "comment",
-    reportedId: commentId,
-  });
-
-  if (existingReport) {
-    return res.status(httpStatus.BAD_REQUEST).json({
-      success: false,
-      message: "You have already reported this comment",
-    });
-  }
-
-  const reportData = {
-    userId: req.user.id,
-    type: "comment",
-    reportedId: commentId,
-    reportedUserId: comment.userId,
-    reason: reason || "",
-    description: description || "",
-  };
-
-  const report = await reportService.createReport(reportData);
-  res.status(httpStatus.CREATED).json({
-    success: true,
-    message: "Comment report created successfully",
-    data: report,
-  });
-});
 
 const getReports = catchAsync(async (req, res) => {
   const reports = await reportService.getAllReports();
@@ -127,7 +65,6 @@ const deleteReport = deleteReportsAdmin;
 
 module.exports = {
   createBlogReport,
-  createCommentReport,
   getReports,
   deleteReport,
 };

@@ -4,6 +4,7 @@ const validate = require('../../middlewares/validate');
 const aiValidation = require('../../validations/ai.validation');
 const aiController = require('../../controllers/ai.controller');
 const rateLimit = require('express-rate-limit');
+const upload = require('../../config/multer');
 
 const router = express.Router();
 
@@ -32,6 +33,16 @@ router
     aiAutofillLimiter,
     validate(aiValidation.generateAutofill),
     aiController.generateAutofill
+  );
+
+router
+  .route('/resume-match')
+  .post(
+    auth(),
+    aiAutofillLimiter,
+    upload.single('resume'),
+    validate(aiValidation.generateResumeMatch),
+    aiController.generateResumeMatch
   );
 
 module.exports = router;

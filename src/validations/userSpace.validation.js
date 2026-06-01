@@ -10,7 +10,6 @@ const addSpace = {
     isClient: Joi.boolean(),
     hiring: Joi.string().allow(""),
     designFees: Joi.number().min(5).max(10000).allow(null),
-    // Removed music-related validations
     websiteUrl: Joi.string().allow(""),
     companyOrStudio: Joi.string().allow(""), // tidak required
     aboutMe: Joi.string().required(),
@@ -55,7 +54,6 @@ const updateSpace = {
     businessOccupation: Joi.any().strip(), // Strip businessOccupation (Supplement field removed)
     hiring: Joi.string().allow(""),
     designFees: Joi.number().min(5).max(10000).allow(null),
-    // Removed music-related validations
     companyOrStudio: Joi.string().allow(""),
     websiteUrl: Joi.string().allow(""),
     aboutMe: Joi.string().allow(""),

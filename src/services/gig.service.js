@@ -79,15 +79,14 @@ const queryGigs = async (filter, options, userId = null) => {
     delete filter.search;
   }
 
-  // Store country and language filters for aggregation
+  // Store the country filter for profile-based filtering.
   const countryFilter = filter.country;
-  const languageFilter = filter.language;
   
   // Handle comma-separated values for multiple selections
   const countryFilters = countryFilter ? countryFilter.split(',').map(c => c.trim()) : [];
-  const languageFilters = languageFilter ? languageFilter.split(',').map(l => l.trim()) : [];
   
   if (filter.country) delete filter.country;
+  // Language filtering is not supported by the current profile schema.
   if (filter.language) delete filter.language;
 
   // Handle sorting
@@ -122,8 +121,8 @@ const queryGigs = async (filter, options, userId = null) => {
   // Remove any existing populate option to avoid conflicts
   const { populate, ...cleanOptions } = options;
 
-  // If country or language filters are present, use a simpler approach
-  if (countryFilters.length > 0 || languageFilters.length > 0) {
+  // If country filters are present, use a profile-aware approach.
+  if (countryFilters.length > 0) {
     
     // First get all gigs normally
     const gigs = await Gig.paginate(filter, {
@@ -132,7 +131,7 @@ const queryGigs = async (filter, options, userId = null) => {
       populate: 'seller'
     });
 
-    // Then filter by country/language using UserSpace data
+    // Then filter by country using UserSpace data
     const filteredResults = [];
     
     for (const gig of gigs.results) {
@@ -141,7 +140,6 @@ const queryGigs = async (filter, options, userId = null) => {
           const userSpace = await getSpace(gig.seller._id.toString());
           
           let matchesCountry = true;
-          let matchesLanguage = true;
           
           // Check country filter
           if (countryFilters.length > 0 && userSpace) {
@@ -155,21 +153,7 @@ const queryGigs = async (filter, options, userId = null) => {
             matchesCountry = countryMatch;
           }
           
-          // Check language filter
-          if (languageFilters.length > 0 && userSpace) {
-            const languageMatch = 
-              userSpace.collaborationLyricsLangs && 
-              languageFilters.some(language => 
-                userSpace.collaborationLyricsLangs.includes(language) ||
-                userSpace.collaborationLyricsLangs.some(lang => 
-                  lang.toLowerCase().includes(language.toLowerCase())
-                )
-              );
-            
-            matchesLanguage = languageMatch;
-          }
-          
-          if (matchesCountry && matchesLanguage) {
+          if (matchesCountry) {
             // Add location to seller for consistency
             if (userSpace && userSpace.location) {
               gig.seller.location = userSpace.location;
@@ -604,111 +588,91 @@ const getGigStats = async (gigId, period = '30d', userId) => {
 const getGigCategories = async () => {
   const categories = [
     {
-      id: 'music-production',
-      name: 'Music Production',
+      id: 'architecture-design',
+      name: 'Architecture Design Services',
       subcategories: [
-        'Full Song Production',
-        'Beat Making',
-        'Instrumental Production',
-        'Remix Production'
+        'Residential Design',
+        'Commercial Design',
+        'Floor Plans',
+        'Concept Design'
       ]
     },
     {
-      id: 'mixing-mastering',
-      name: 'Mixing & Mastering',
+      id: 'interior-design',
+      name: 'Interior Design Services',
       subcategories: [
-        'Audio Mixing',
-        'Audio Mastering',
-        'Mix and Master',
-        'Vocal Mixing'
+        'Space Planning',
+        'Interior Rendering',
+        'Furniture Layout',
+        'Material Selection'
       ]
     },
     {
-      id: 'songwriting',
-      name: 'Songwriting',
+      id: 'product-industrial-design',
+      name: 'Product & Industrial Design Services',
       subcategories: [
-        'Lyrics Writing',
-        'Melody Writing', 
-        'Complete Song Writing',
-        'Song Translation'
+        'Product Concepts',
+        'CAD Modeling',
+        'Prototype Design',
+        'Manufacturing Drawings'
       ]
     },
     {
-      id: 'vocal-recording',
-      name: 'Vocal Recording',
+      id: 'environment-scene-design',
+      name: 'Environment & Scene Design Services',
       subcategories: [
-        'Lead Vocals',
-        'Backing Vocals',
-        'Vocal Harmonies',
-        'Vocal Editing'
+        'Game Environments',
+        'Film Sets',
+        'Landscape Scenes',
+        'Concept Art'
       ]
     },
     {
-      id: 'beat-making',
-      name: 'Beat Making',
+      id: 'vehicle-hard-surface-design',
+      name: 'Vehicle & Hard-surface Design Services',
       subcategories: [
-        'Hip Hop Beats',
-        'Pop Beats',
-        'Electronic Beats',
-        'Custom Beats'
+        'Vehicle Modeling',
+        'Mechanical Props',
+        'Hard-surface Assets',
+        'Technical Visualization'
       ]
     },
     {
-      id: 'lyrics-writing',
-      name: 'Lyrics Writing',
+      id: 'props-asset-creation',
+      name: 'Props & Asset Creation Services',
       subcategories: [
-        'Song Lyrics',
-        'Rap Lyrics',
-        'Poetry',
-        'Jingle Lyrics'
+        'Game Props',
+        'Product Assets',
+        'Furniture Assets',
+        'Asset Optimization'
       ]
     },
     {
-      id: 'voice-over',
-      name: 'Voice Over',
+      id: 'visualization-rendering',
+      name: '3D Visualization & Rendering Services',
       subcategories: [
-        'Commercial Voice Over',
-        'Narration',
-        'Character Voices',
-        'Radio Voice Over'
+        'Architectural Rendering',
+        'Product Rendering',
+        'Lighting',
+        'Post-production'
       ]
     },
     {
-      id: 'podcast-editing',
-      name: 'Podcast Editing',
+      id: 'animation-video-design',
+      name: 'Animation & Video Design Services',
       subcategories: [
-        'Podcast Editing',
-        'Audio Enhancement',
-        'Noise Removal',
-        'Podcast Mixing'
-      ]
-    },
-    {
-      id: 'sound-design',
-      name: 'Sound Design',
-      subcategories: [
-        'Sound Effects',
-        'Ambient Sounds',
-        'Game Audio',
-        'Film Scoring'
-      ]
-    },
-    {
-      id: 'jingle-creation',
-      name: 'Jingle Creation',
-      subcategories: [
-        'Radio Jingles',
-        'Commercial Jingles',
-        'Podcast Intros',
-        'YouTube Intros'
+        '3D Animation',
+        'Motion Design',
+        'Product Animation',
+        'Walkthrough Videos'
       ]
     },
     {
       id: 'other',
       name: 'Other',
       subcategories: [
-        'Audio Consultation',
-        'Music Lessons',
+        'Design Consultation',
+        'Portfolio Review',
         'Equipment Setup',
         'Custom Services'
       ]

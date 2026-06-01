@@ -13,22 +13,6 @@ const gigSchema = mongoose.Schema(
       type: String,
       required: true,
       enum: [
-        // Music / Audio
-        "music-production",
-        "mixing-mastering",
-        "songwriting",
-        "vocal-recording",
-        "beat-making",
-        "lyrics-writing",
-        "voice-over",
-        "podcast-editing",
-        "sound-design",
-        "jingle-creation",
-        "instruments",
-        "composition",
-        "vocals",
-        "audio-engineering",
-        
         // Design categories (MATCH FRONTEND EXACTLY)
         "Architecture Design Services",
         "Interior Design Services",
@@ -146,11 +130,6 @@ const gigSchema = mongoose.Schema(
       {
         type: String,
         required: true,
-      },
-    ],
-    referenceSongs: [
-      {
-        type: String,
       },
     ],
     referenceArtworks: [

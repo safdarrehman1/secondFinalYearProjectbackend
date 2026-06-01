@@ -70,14 +70,11 @@ async function createJob() {
     const jobData = {
       projectTitle: "Test Expiration Job " + Date.now(),
       description: "A test job to verify expiration logic.",
-      category: ["Music"],
+      category: ["Architecture Design Services"],
       budget: ["100-200"],
       timeFrame: "1 month",
       preferredLocation: "Remote",
-      musicUse: ["Commercial"],
       cultureArea: ["Pop"],
-      isHaveLyric: false,
-      lyricLanguage: "English",
     };
 
     const response = await axios.post(`${BASE_URL}/job`, jobData, {

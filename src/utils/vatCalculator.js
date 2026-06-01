@@ -1,5 +1,5 @@
 /**
- * VAT Calculator for Music Platform (Backend)
+ * VAT calculator for marketplace payments.
  *
  * VAT Rate: 10% (for the user's state)
  * Three-way split:

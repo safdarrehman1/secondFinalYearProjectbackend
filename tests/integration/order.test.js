@@ -99,7 +99,7 @@ describe("Order Routes Integration", () => {
     // Create Gig
     gig = await Gig.create({
       title: "Test Gig for Metrics",
-      category: "music-production",
+      category: "Architecture Design Services",
       description: "This is a test gig description that is long enough.",
       seller: seller._id,
       videos: ["http://example.com/video.mp4"],
@@ -170,31 +170,6 @@ describe("Order Routes Integration", () => {
       expect(dbBuyer.buyerMetrics.totalOrders).toBe(1);
     });
 
-    test("should update metrics for music order (no gig)", async () => {
-      // Create music order without gig
-      const musicOrder = await Order.create({
-        recruiterId: buyer._id,
-        buyer: buyer._id,
-        seller: seller._id,
-        createdBy: seller._id,
-        totalAmount: 100,
-        price: 100,
-        status: "active",
-        type: "music_order",
-        title: "Custom Music Project",
-        paymentMethod: "stripe",
-      });
-
-      const res = await request(app)
-        .post(`/v1/order/${musicOrder._id}/deliver/accept`)
-        .set("Authorization", `Bearer ${buyerAccessToken}`)
-        .send({ message: "Music received" })
-        .expect(httpStatus.OK);
-
-      const dbSeller = await User.findById(seller._id);
-      // specific test case: existing gig order + this music order = 2 total orders
-      expect(dbSeller.sellerMetrics.totalOrders).toBe(1);
-    });
   });
 
   describe("PUT /v1/order/:orderId/status", () => {

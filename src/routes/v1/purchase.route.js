@@ -17,8 +17,6 @@ const downloadLimiter = rateLimit({
 });
 
 // Purchase History Routes
-router.post("/create", auth(), purchaseController.createPurchase);
-router.post("/stripe", auth(), purchaseController.createStripePurchase);
 router.post("/sponsor", auth(), purchaseController.createSponsorship);
 
 // Gig order routes
@@ -41,29 +39,6 @@ router.get(
   validate(purchaseValidation.getPurchaseDetails),
   purchaseController.getPurchaseDetails,
 );
-router.post(
-  "/history/:purchaseId/download",
-  auth(),
-  downloadLimiter,
-  validate(purchaseValidation.generateDownloadUrl),
-  purchaseController.generateDownloadUrl,
-);
-router.get(
-  "/history/:purchaseId/download/:token",
-  auth(),
-  downloadLimiter,
-  validate(purchaseValidation.downloadPurchasedFile),
-  purchaseController.downloadPurchasedFile,
-);
-
-// Simple download endpoint
-router.get(
-  "/history/:purchaseId/download",
-  auth(),
-  downloadLimiter,
-  purchaseController.downloadFile,
-);
-
 // Sales Data Routes (for creators)
 router.get(
   "/sales",

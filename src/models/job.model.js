@@ -1,8 +1,5 @@
 const mongoose = require("mongoose");
-const validator = require("validator");
-const bcrypt = require("bcryptjs");
 const { toJSON, paginate } = require("./plugins");
-const { roles } = require("../config/roles");
 
 const jobSchema = mongoose.Schema(
   {
@@ -35,12 +32,6 @@ const jobSchema = mongoose.Schema(
         required: true,
       },
     ],
-    isHaveLyric: {
-      type: Boolean,
-    },
-    lyricLanguage: {
-      type: String,
-    },
     budget: {
       type: String,
       required: true,
@@ -62,11 +53,6 @@ const jobSchema = mongoose.Schema(
     applicantName: {
       type: String,
     },
-    musicUse: [
-      {
-        type: String,
-      },
-    ],
     cultureArea: [
       {
         type: String,
@@ -83,22 +69,21 @@ const jobSchema = mongoose.Schema(
       type: [String],
       default: [],
     },
-
     applicantAvatar: {
       type: String,
     },
     applicantBackgroundImage: {
       type: String,
     },
-    applicantSelectedSongs: [
-      {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "Music",
-      },
-    ],
     savedBy: [
       {
         type: String,
+      },
+    ],
+    likes: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
       },
     ],
     createdBy: {
@@ -114,13 +99,9 @@ const jobSchema = mongoose.Schema(
   },
 );
 
-// add plugin that converts mongoose to json
 jobSchema.plugin(toJSON);
 jobSchema.plugin(paginate);
 
-/**
- * @typedef Job
- */
 const Job = mongoose.model("Job", jobSchema);
 
 module.exports = Job;

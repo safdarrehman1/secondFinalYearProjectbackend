@@ -122,7 +122,7 @@ module.exports = router;
  *                 maxLength: 80
  *               category:
  *                 type: string
- *                 enum: [music-production, mixing-mastering, songwriting, vocal-recording, beat-making, lyrics-writing, voice-over, podcast-editing, sound-design, jingle-creation, instruments, composition, vocals, audio-engineering, 3D Design, Architecture, Interior Design, Industrial Design, Home & Lifestyle Product Design, Landscape Design, Urban Design, Exhibition & Experience Design, Transportation Design, Game & Film Environment Design, BIM & Parametric Design, Video Design, other]
+ *                 enum: [Architecture Design Services, Interior Design Services, Product & Industrial Design Services, Environment & Scene Design Services, Vehicle & Hard-surface Design Services, Props & Asset Creation Services, 3D Visualization & Rendering Services, Animation & Video Design Services, other]
  *               subcategory:
  *                 type: string
  *               description:

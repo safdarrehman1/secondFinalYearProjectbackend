@@ -452,8 +452,7 @@ const addReviewAndRating = async (
   console.log("Buyer review:", buyerReview);
 
   // Check if this is a gig order OR if it has gig information
-  const isGigOrder =
-    order.type === "gig_order" || order.type === "music_order" || order.gig;
+  const isGigOrder = order.type === "gig_order" || order.gig;
 
   if (isGigOrder && order.gig && buyerRating && buyerReview && buyerId) {
     try {

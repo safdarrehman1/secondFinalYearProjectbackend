@@ -4,12 +4,6 @@ const { ObjectId } = require("mongodb");
 
 const orderSchema = mongoose.Schema(
   {
-    // Legacy fields for music orders
-    musicIds: [
-      {
-        type: String,
-      },
-    ],
     recruiterId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
@@ -66,8 +60,8 @@ const orderSchema = mongoose.Schema(
     // Order type
     type: {
       type: String,
-      enum: ["music_order", "gig_order"],
-      default: "music_order",
+      enum: ["gig_order"],
+      default: "gig_order",
     },
 
     title: {
@@ -309,7 +303,7 @@ orderSchema.post("save", async function (doc) {
     try {
       const balanceHelper = require("../utils/balanceHelper");
 
-      // Add balance to the service provider (createdBy - musician/freelancer)
+      // Add balance to the service provider.
       await balanceHelper.addOrderCompletionBalance(
         doc.createdBy,
         doc.totalAmount || doc.price,

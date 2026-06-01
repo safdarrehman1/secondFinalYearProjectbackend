@@ -3,16 +3,13 @@ const pick = require("../utils/pick");
 const ApiError = require("../utils/ApiError");
 const catchAsync = require("../utils/catchAsync");
 const { userService, transactionService, userStatsService } = require("../services");
-const User = require("../models/user.model"); // Import User model
+const User = require("../models/user.model");
 const UserSpace = require("../models/userSpace.model");
 const reportService = require("../services/report.service");
-const Music = require("../models/music.model");
-const LyricsMusic = require("../models/lyrics.model");
-const ShareMusicAsset = require("../models/shareMusicAsset.model");
-const Job = require("../models/job.model"); // Uncomment if needed for job-related operations
-const AppliedJobs = require("../models/appliedJobs.model"); // Uncomment if needed for job-related operations
-const Chat = require("../models/chat.model"); // Tambahkan Chat model jika belum
-const ChatService = require("../services/chat.service"); // Pastikan ChatService sudah ada
+const Job = require("../models/job.model");
+const AppliedJobs = require("../models/appliedJobs.model");
+const Chat = require("../models/chat.model");
+const ChatService = require("../services/chat.service");
 const { Blog } = require("../models");
 const hardcodedStats = require("../config/hardcodedStats.json");
 const {
@@ -54,7 +51,7 @@ const getUserByIdPublic = catchAsync(async (req, res) => {
     result = { ...result, ...userSpace.toObject() };
   }
 
-  // Single source of truth: same aggregate as user-space (Music, Lyrics, ShareMusicCreation use string createdBy; ShareMusicAsset, Gig use ObjectId)
+  // Single source of truth: same aggregate as user-space
   result.totalLikes = await userStatsService.calculateTotalLikes(user._id);
 
   // Followers: real count + virtual (1–2 added per user per day by cron)
@@ -533,7 +530,7 @@ const processWithdrawal = catchAsync(async (req, res) => {
       receiverEmail: user.paypalEmail,
       amount: netAmount,
       currency: "USD",
-      note: `Withdrawal from Music App`,
+      note: `Withdrawal from Job Platform`,
       senderItemId: `WD-${userId}-${Date.now()}`,
     });
 
@@ -756,7 +753,7 @@ const getAllUsersAdmin = async (req, res) => {
             ",",
           )[0] || "-",
         followers: u.following ? u.following.length : 0,
-        likes: u.likedSongs ? u.likedSongs.length : 0,
+        likes: 0,
         orders: 0, // dummy
         sales: 0, // dummy
         lastLogin: u.lastLogin || "2025-06-01T00:00:00Z", // dummy
@@ -980,13 +977,7 @@ const getAllReportsAdmin = async (req, res) => {
         }
         // Fetch reported data and normalize to only name/title
         let reportedData = null;
-        if (r.type === "music") {
-          const music = await Music.findById(r.reportedId);
-          reportedData = music ? music.songName : null;
-        } else if (r.type === "lyric") {
-          const lyric = await LyricsMusic.findById(r.reportedId);
-          reportedData = lyric ? lyric.lyricName : null;
-        } else if (r.type === "job") {
+        if (r.type === "job") {
           const job = await Job.findById(r.reportedId);
           reportedData = job ? job.title : null;
         } else if (r.type === "user") {
@@ -1029,21 +1020,8 @@ const deleteReportsAdmin = async (req, res) => {
     const reports = await reportService.getReportsByIds(ids);
     let deletedContent = 0;
     for (const report of reports) {
-      if (report.type === "music") {
-        await Music.findByIdAndDelete(report.reportedId);
-        deletedContent++;
-      } else if (report.type === "lyrics") {
-        await LyricsMusic.findByIdAndDelete(report.reportedId);
-        deletedContent++;
-      } else if (report.type === "assets") {
-        await ShareMusicAsset.findByIdAndDelete(report.reportedId);
-        deletedContent++;
-      } else if (report.type === "user") {
+      if (report.type === "user") {
         await User.findByIdAndDelete(report.reportedId);
-        // Hapus semua music, lyric, asset, dan job milik user ini
-        await Music.deleteMany({ createdBy: report.reportedId });
-        await LyricsMusic.deleteMany({ createdBy: report.reportedId });
-        await ShareMusicAsset.deleteMany({ createdBy: report.reportedId });
         await Job.deleteMany({ createdBy: report.reportedId });
         deletedContent++;
       } else if (report.type === "job") {

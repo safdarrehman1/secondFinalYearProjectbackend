@@ -7,7 +7,6 @@ const { roles } = require("../config/roles");
 // firstName: Joi.string().required(),
 // lastName: Joi.string().required(),
 // occupation: Joi.string().required(),
-// musicCultureRegion: Joi.array().items(Joi.string()).required(),
 // hiring: Joi.array().items(Joi.string()).required(),
 // company: Joi.string().required(),
 // location: Joi.string().required(),
@@ -48,7 +47,6 @@ const userSpaceSchema = mongoose.Schema(
       type: String,
       required: true,
     },
-    // Removed music-related fields
     designFees: {
       type: Number,
       min: 5,

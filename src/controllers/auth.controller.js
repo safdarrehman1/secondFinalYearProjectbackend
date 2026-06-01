@@ -40,7 +40,7 @@ const login = catchAsync(async (req, res) => {
   const userSpace = await userSpaceService.getSpace(user.id);
   user.profilePicture =
     userSpace?.profilePicture ||
-    "https://musicimagevideos.s3.ap-southeast-2.amazonaws.com/music/others/685faf70bfcdd925769fa07a/1751101939604-Screen Shot 2025-06-28 at 16.12.06.png";
+    "";
   user.name = userSpace
     ? userSpace?.firstName + " " + userSpace?.lastName
     : user.name;

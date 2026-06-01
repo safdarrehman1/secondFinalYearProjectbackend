@@ -130,7 +130,7 @@ class SquareService {
     
     const baseUrl = process.env.BACKEND_URL || 
                    (process.env.NODE_ENV === 'production' 
-                     ? 'https://musicapp2025-be.vercel.app'
+                     ? `http://localhost:${process.env.PORT || '5051'}`
                      : `http://localhost:${process.env.PORT || '5051'}`);
     
     return `${baseUrl}/v1/square/callback`;

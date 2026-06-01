@@ -5,18 +5,8 @@ const { toJSON, paginate } = require('./plugins');
 const { roles } = require('../config/roles');
 const { ObjectId } = require('mongodb');
 
-// musicIds: Joi.array().min(4).max(4).items(Joi.string().custom(objectId)).required(),
-// message: Joi.string().required(),
-
 const appliedJobSchema = mongoose.Schema(
   {
-    musicIds: [
-      {
-        type: ObjectId,
-        ref: 'Music',
-        required: true,
-      },
-    ],
     message: {
       type: String,
       required: true,
@@ -30,6 +20,18 @@ const appliedJobSchema = mongoose.Schema(
       type: ObjectId,
       ref: 'User',
       required: true,
+    },
+    resumeMatchScore: {
+      type: Number,
+      required: true,
+    },
+    resumeMatchSuggestion: {
+      type: String,
+      required: true,
+    },
+    missingSkills: {
+      type: [String],
+      default: [],
     },
   },
   {
