@@ -7,9 +7,9 @@ const router = express.Router();
 
 router.post("/create", auth("user"), orderController.createOrder);
 
-// Purchase endpoint (compatibility with frontend POST /v1/order/purchase)
-const { purchaseController } = require("../../controllers");
-router.post("/purchase", auth("user"), purchaseController.createPurchase);
+// Purchase endpoint (compatibility with frontend POST /v1/order/purchase) - obsolete
+// const { purchaseController } = require("../../controllers");
+// router.post("/purchase", auth("user"), purchaseController.createPurchase);
 
 router.get("/sales", auth("user"), orderController.getCompletedOrders);
 

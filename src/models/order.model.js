@@ -69,7 +69,7 @@ const orderSchema = mongoose.Schema(
     },
     startTime: {
       type: Date,
-      default: Date.now(),
+      default: Date.now,
     },
     completedAt: {
       type: Date,
@@ -160,9 +160,6 @@ const orderSchema = mongoose.Schema(
       type: String,
       minlength: 10,
       maxlength: 200,
-    },
-    buyerReviewAt: {
-      type: Date,
     },
     buyerReviewAt: {
       type: Date,
@@ -296,10 +293,15 @@ const orderSchema = mongoose.Schema(
 orderSchema.plugin(toJSON);
 orderSchema.plugin(paginate);
 
+orderSchema.pre("save", function (next) {
+  this._statusModified = this.isModified("status");
+  next();
+});
+
 // Middleware to handle balance updates when order status changes
 orderSchema.post("save", async function (doc) {
   // Only process if status changed to 'complete'
-  if (this.isModified("status") && doc.status === "complete") {
+  if (this._statusModified && doc.status === "complete") {
     try {
       const balanceHelper = require("../utils/balanceHelper");
 
@@ -323,6 +325,6 @@ orderSchema.post("save", async function (doc) {
 /**
  * @typedef Order
  */
-const Order = mongoose.model("Orders", orderSchema);
+const Order = mongoose.model("Order", orderSchema);
 
 module.exports = Order;
