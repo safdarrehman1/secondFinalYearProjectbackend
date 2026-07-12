@@ -67,6 +67,12 @@ const userSpaceSchema = mongoose.Schema(
     softwareTool: {
       type: [String],
     },
+    proficientMusicStyles: {
+      type: [String],
+    },
+    skilledInstruments: {
+      type: [String],
+    },
     myServices: {
       type: [String],
     },

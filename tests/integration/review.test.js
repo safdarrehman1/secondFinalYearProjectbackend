@@ -41,14 +41,6 @@ jest.mock("../../src/services/stripe.service", () => ({
 jest.mock("square", () => ({ Client: jest.fn() }));
 jest.mock("@apimatic/axios-client-adapter", () => ({}));
 jest.mock("axios", () => ({}));
-jest.mock(
-  "groq-sdk",
-  () =>
-    function () {
-      return { chat: { completions: { create: jest.fn() } } };
-    },
-);
-
 // Mock PayPal SDK to prevent initialization errors in payment.route.js
 jest.mock("@paypal/paypal-server-sdk", () => ({
   Client: jest.fn().mockImplementation(() => ({})),

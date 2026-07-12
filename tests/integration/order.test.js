@@ -35,12 +35,6 @@ jest.mock("axios", () => ({
   post: jest.fn(),
 }));
 
-jest.mock("groq-sdk", () => {
-  return class Groq {
-    chat = { completions: { create: jest.fn() } };
-  };
-});
-
 // Mock payment services to avoid syntax errors and external calls
 jest.mock("../../src/services/paypal.service", () => ({
   createPayment: jest.fn(),

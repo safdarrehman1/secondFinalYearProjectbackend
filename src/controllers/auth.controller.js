@@ -10,19 +10,14 @@ const {
 const config = require("../config/config");
 
 const register = catchAsync(async (req, res) => {
-  try {
-    const user = await userService.createUser({
-      ...req.body,
-      isEmailVerified: false,
-    });
+  const user = await userService.createUser({
+    ...req.body,
+    isEmailVerified: true,
+  });
 
-    const tokens = await tokenService.generateAuthTokens(user);
-    const verifyEmailToken = await tokenService.generateVerifyEmailToken(user);
-    await emailService.sendVerificationEmail(user.email, verifyEmailToken);
-    res.status(httpStatus.CREATED).send({ user, tokens });
-  } catch (error) {
-    console.log("error: ", error);
-  }
+  const tokens = await tokenService.generateAuthTokens(user);
+
+  res.status(httpStatus.CREATED).send({ user, tokens });
 });
 
 const login = catchAsync(async (req, res) => {
@@ -81,8 +76,12 @@ const sendVerificationEmail = catchAsync(async (req, res) => {
 });
 
 const verifyEmail = catchAsync(async (req, res) => {
-  const result = await authService.verifyEmail(req.query.token);
-  res.redirect(`${config.frontend.url}/auth/login`);
+  await authService.verifyEmail(req.query.token);
+  if (req.method === 'GET') {
+    res.redirect(`${config.frontend.url}/auth/login`);
+  } else {
+    res.status(httpStatus.NO_CONTENT).send();
+  }
 });
 
 const googleRegister = catchAsync(async (req, res) => {

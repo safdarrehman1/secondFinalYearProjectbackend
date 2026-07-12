@@ -13,5 +13,6 @@ router.route('/job-background').post(auth('user'), uploadDynamic.single('jobBack
 router.route('/work-image').post(auth('user'), uploadDynamic.single('workImage'), uploadController.uploadImage);
 router.route('/asset-image').post(auth('user'), uploadDynamic.single('assetImage'), uploadController.uploadImage);
 router.route('/asset-file').post(auth('user'), uploadAssetFile.single('asset'), uploadController.uploadImage);
+router.route('/cv').post(auth('user'), uploadDynamic.single('profileCV'), uploadController.uploadImage);
 
 module.exports = router;

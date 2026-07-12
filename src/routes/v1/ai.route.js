@@ -45,6 +45,33 @@ router
     aiController.generateResumeMatch
   );
 
+router
+  .route('/application-message')
+  .post(
+    auth(),
+    aiAutofillLimiter,
+    validate(aiValidation.generateApplicationMessage),
+    aiController.generateApplicationMessage
+  );
+
+router
+  .route('/profile-about')
+  .post(
+    auth(),
+    aiAutofillLimiter,
+    validate(aiValidation.generateProfileAbout),
+    aiController.generateProfileAbout
+  );
+
+router
+  .route('/job-description')
+  .post(
+    auth(),
+    aiAutofillLimiter,
+    validate(aiValidation.generateJobDescription),
+    aiController.generateJobDescription
+  );
+
 module.exports = router;
 
 /**

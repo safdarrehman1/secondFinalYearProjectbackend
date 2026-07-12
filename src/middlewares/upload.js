@@ -91,7 +91,7 @@ const s3 = new S3Client({
   },
 });
 
-// Allow image, audio, and archive formats for asset uploads
+// Allow image, audio, archive, and document formats
 const allowedMimes = [
   'image/jpeg',
   'image/png',
@@ -106,6 +106,10 @@ const allowedMimes = [
   'application/vnd.rar', // Alternative RAR MIME type
   'application/x-rar', // Another RAR MIME type variation
   'application/x-7z-compressed',
+  // Documents for CV/profile uploads
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
 ];
 
 // Allow more file types for chat attachments
