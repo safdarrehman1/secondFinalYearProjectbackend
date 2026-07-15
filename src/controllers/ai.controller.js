@@ -465,90 +465,87 @@ const generateApplicationMessage = catchAsync(async (req, res) => {
     return res.status(httpStatus.NOT_FOUND).json({ success: false, message: 'Job not found' });
   }
 
-  const fallbackMessage = `Hello ${recipientName || 'Recruiter'}, I would like to apply for the ${job.projectTitle} position. My background includes relevant experience for this role, and I am committed to delivering high-quality results. I would welcome the opportunity to discuss how my experience can support your project.`;
-  let message = fallbackMessage;
-
-  if (config.gemini.apiKey) {
-    try {
-      const completion = await generateGeminiContent(
-        'You write concise, honest, professional job application messages. Return valid JSON only.',
-        `Write a personalized application message from an applicant to ${recipientName || 'the recruiter'} for this job.
+  try {
+    const completion = await generateGeminiContent(
+      'You write concise, honest, polished job application messages tailored to the supplied role. Avoid generic filler, clichés, and repeated stock phrases. Return valid JSON only.',
+      `Write a unique, personalized application message from an applicant to ${recipientName || 'the recruiter'} for this job.
 Job title: ${job.projectTitle}
 Job description: ${String(job.description || '').slice(0, 4000)}
 Resume match score: ${score}%
 Skills the applicant should improve: ${missingSkills.join(', ') || 'None identified'}
 
-Do not invent employers, years of experience, qualifications, or projects. Mention relevant fit confidently but honestly. Write 80 to 140 words. Return only JSON: {"message":"..."}`,
-        { temperature: 0.4, maxOutputTokens: 300 },
-      );
-      const generated = JSON.parse(completion.text).message;
-      if (typeof generated === 'string' && generated.trim().length >= 50) {
-        message = generated.trim().slice(0, 1000);
-      }
-    } catch (error) {
-      console.warn(`Application message AI unavailable, using fallback: ${error.message}`);
+Use the role details to make the message specific. Do not invent employers, years of experience, qualifications, or projects. Mention relevant fit confidently but honestly. Vary the opening and sentence structure naturally. Write 80 to 140 words. Return only JSON: {"message":"..."}`,
+      { temperature: 0.65 },
+    );
+    const generated = JSON.parse(completion.text).message;
+    if (typeof generated !== 'string' || generated.trim().length < 50) {
+      throw new Error('Invalid AI response: application message is too short');
     }
+    return res.status(httpStatus.OK).json({ success: true, message: generated.trim().slice(0, 1000) });
+  } catch (error) {
+    console.error(`Application message AI generation failed: ${error.message}`);
+    return res.status(503).json({
+      success: false,
+      message: 'AI could not generate the application message right now. Please try again.',
+      error: 'AI_GENERATION_FAILED',
+    });
   }
-
-  return res.status(httpStatus.OK).json({ success: true, message });
 });
 
 const generateProfileAbout = catchAsync(async (req, res) => {
   const { occupations = [], softwareTools = [], currentAbout = '' } = req.body;
-  const fallback = `I am a dedicated ${occupations.join(' and ') || 'creative professional'} focused on delivering thoughtful, high-quality work. My experience includes ${softwareTools.join(', ') || 'a range of professional tools'}, and I enjoy turning ideas into meaningful results through collaboration, attention to detail, and continuous learning.`;
-  let aboutMe = fallback;
-
-  if (config.gemini.apiKey) {
-    try {
-      const completion = await generateGeminiContent(
-        'You write authentic, polished professional profile biographies. Return valid JSON only.',
-        `Write a first-person About Me biography for a professional profile.
+  try {
+    const completion = await generateGeminiContent(
+      'You write authentic, distinctive, polished professional profile biographies. Avoid generic filler, clichés, and reusable stock introductions. Return valid JSON only.',
+      `Write a unique first-person About Me biography for a professional profile.
 Occupations: ${occupations.join(', ') || 'Not specified'}
 Software tools: ${softwareTools.join(', ') || 'Not specified'}
 Existing notes: ${currentAbout || 'None'}
 
-Use only the supplied facts; do not invent employers, qualifications, awards, clients, or years of experience. Keep it warm and professional in 90 to 150 words. Return only JSON: {"aboutMe":"..."}`,
-        { temperature: 0.5, maxOutputTokens: 350 },
-      );
-      const generated = JSON.parse(completion.text).aboutMe;
-      if (typeof generated === 'string' && generated.trim().length >= 80) {
-        aboutMe = generated.trim().slice(0, 3000);
-      }
-    } catch (error) {
-      console.warn(`Profile About AI unavailable, using fallback: ${error.message}`);
+Use the supplied details to create natural, specific prose with varied sentence structure. Use only the supplied facts; do not invent employers, qualifications, awards, clients, or years of experience. Keep it warm and professional in 90 to 150 words. Return only JSON: {"aboutMe":"..."}`,
+      { temperature: 0.7 },
+    );
+    const generated = JSON.parse(completion.text).aboutMe;
+    if (typeof generated !== 'string' || generated.trim().length < 80) {
+      throw new Error('Invalid AI response: profile biography is too short');
     }
+    return res.status(httpStatus.OK).json({ success: true, aboutMe: generated.trim().slice(0, 3000) });
+  } catch (error) {
+    console.error(`Profile About AI generation failed: ${error.message}`);
+    return res.status(503).json({
+      success: false,
+      message: 'AI could not generate the profile description right now. Please try again.',
+      error: 'AI_GENERATION_FAILED',
+    });
   }
-
-  return res.status(httpStatus.OK).json({ success: true, aboutMe });
 });
 
 const generateJobDescription = catchAsync(async (req, res) => {
   const { prompt, jobTitle = '', category = '' } = req.body;
-  const fallback = `${jobTitle || 'Role'}\n\nWe are seeking a skilled professional to support this opportunity. ${prompt}\n\nThe successful candidate will collaborate with stakeholders, deliver high-quality work, communicate progress clearly, and meet agreed timelines. Applicants should demonstrate relevant practical experience, strong problem-solving ability, attention to detail, and examples of comparable work. Please include the tools and methods you use, your availability, and measurable outcomes from relevant projects.`;
-  let description = fallback;
-
-  if (config.gemini.apiKey) {
-    try {
-      const completion = await generateGeminiContent(
-        'You write clear, inclusive, professional job descriptions. Return valid JSON only.',
-        `Create a complete job description from the recruiter's prompt.
+  try {
+    const completion = await generateGeminiContent(
+      'You are a senior talent copywriter. You create distinctive, inclusive, professional job descriptions grounded strictly in the supplied role details. Avoid generic boilerplate, clichés, and repeated stock wording. Return valid JSON only.',
+      `Create a unique, complete job description from the recruiter's prompt.
 Job title: ${jobTitle || 'Not specified'}
 Category: ${category || 'Not specified'}
 Recruiter prompt: ${prompt}
 
-Include a brief overview, responsibilities, required skills and tools, preferred experience, and expected outcomes. Do not invent salary, company details, or requirements not supported by the prompt. Write 250 to 450 words. Return only JSON: {"description":"..."}`,
-        { temperature: 0.4, maxOutputTokens: 700 },
-      );
-      const generated = JSON.parse(completion.text).description;
-      if (typeof generated === 'string' && generated.trim().length >= 200) {
-        description = generated.trim().slice(0, 3000);
-      }
-    } catch (error) {
-      console.warn(`Job description AI unavailable, using fallback: ${error.message}`);
+Adapt the structure and wording to this specific role. Include a concise overview, concrete responsibilities, required skills and tools, preferred experience, and expected outcomes only when supported by the prompt. Do not invent salary, company details, benefits, qualifications, or requirements. Avoid phrases such as "we are seeking a skilled professional" and "the successful candidate will" unless the context genuinely calls for them. Write 250 to 450 words. Return only JSON: {"description":"..."}`,
+      { temperature: 0.7 },
+    );
+    const generated = JSON.parse(completion.text).description;
+    if (typeof generated !== 'string' || generated.trim().length < 200) {
+      throw new Error('Invalid AI response: job description is too short');
     }
+    return res.status(httpStatus.OK).json({ success: true, description: generated.trim().slice(0, 5000) });
+  } catch (error) {
+    console.error(`Job description AI generation failed: ${error.message}`);
+    return res.status(503).json({
+      success: false,
+      message: 'AI could not generate the job description right now. Please try again.',
+      error: 'AI_GENERATION_FAILED',
+    });
   }
-
-  return res.status(httpStatus.OK).json({ success: true, description });
 });
 
 module.exports = {

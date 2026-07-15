@@ -73,10 +73,10 @@ const envVarsSchema = Joi.object()
     // Gemini AI configuration
     GEMINI_API_KEY: Joi.string().allow("").optional().description("Gemini API key"),
     GEMINI_MODEL: Joi.string()
-      .default("gemini-2.5-flash")
+      .default("gemini-3.5-flash")
       .description("Gemini model to use"),
     GEMINI_MAX_TOKENS: Joi.number()
-      .default(2048)
+      .default(4096)
       .description("Maximum tokens for Gemini response"),
     GEMINI_TEMPERATURE: Joi.number()
       .default(0.8)
