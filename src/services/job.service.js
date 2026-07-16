@@ -161,9 +161,6 @@ const getJobById = async (id) => {
   };
 };
 
-const ChatService = require("./chat.service");
-const userStatsService = require("./userStats.service");
-
 /**
  * Apply a job
  * @param {Object} body
@@ -171,60 +168,6 @@ const userStatsService = require("./userStats.service");
  */
 const applyJob = async (body) => {
   const application = await AppliedJobs.create(body);
-
-  // Create chat for job application
-  try {
-    const job = await Job.findById(body.jobId);
-    if (job) {
-      const applicantIdStr =
-        typeof body.createdBy === "string"
-          ? body.createdBy
-          : body.createdBy?.toString?.();
-
-      // Fetch Applicant Data for Card
-      const applicant = await User.findById(body.createdBy).lean();
-      const userSpace = await UserSpace.findOne({
-        createdBy: applicantIdStr,
-      }).lean();
-
-      const totalLikes = await userStatsService.calculateTotalLikes(body.createdBy);
-
-      const fullName = userSpace
-        ? `${userSpace.firstName || ""} ${userSpace.lastName || ""}`.trim()
-        : applicant?.name;
-
-      const cardData = {
-        type: "jobApplication",
-        jobId: body.jobId,
-        applicant: {
-          id: applicant._id,
-          name: fullName,
-          profilePicture: userSpace?.profilePicture || applicant?.profilePicture,
-          myServices: userSpace?.myServices || [],
-          country: userSpace?.country || userSpace?.address?.split(",")[0],
-          city: userSpace?.city,
-          profileIntroduction: userSpace?.aboutMe || "",
-          totalLikes,
-          totalCollect: userSpace?.totalCollect || 0,
-          creationOccupation: userSpace?.creationOccupation || [],
-          coverUrl: userSpace?.coverUrl,
-          aboutMe: userSpace?.aboutMe || "",
-        },
-      };
-
-      await ChatService.createJobApplicationChat(
-        body.createdBy, // applicant
-        job.createdBy, // job poster
-        body.jobId,
-        body.message,
-        cardData,
-      );
-    }
-  } catch (error) {
-    console.error("Failed to create job application chat:", error);
-    // Don't fail the application if chat creation fails, but maybe log it
-  }
-
   return application;
 };
 
@@ -376,11 +319,20 @@ const getAppliedJobs = async (userId) => {
   });
 
   // Gabungkan userSpace ke setiap job
-  const jobsWithUserSpace = jobs.map((job) => ({
-    ...job,
-    id: job._id?.toString(),
-    userSpace: userSpaceMap[job.createdBy?.toString()] || null,
-  }));
+  const jobsWithUserSpace = jobs.map((job) => {
+    const application = appliedJobs.find(
+      (item) => item.jobId.toString() === job._id.toString(),
+    );
+    return {
+      ...job,
+      id: job._id?.toString(),
+      jobId: job._id?.toString(),
+      applicationId: application?._id?.toString(),
+      applicationScreeningStatus: application?.screeningStatus,
+      applicantId: application?.createdBy?.toString(),
+      userSpace: userSpaceMap[job.createdBy?.toString()] || null,
+    };
+  });
 
   return jobsWithUserSpace;
 };

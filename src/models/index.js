@@ -13,3 +13,4 @@ module.exports.Transaction = require('./transaction.model');
 module.exports.Gig = require('./gig.model');
 module.exports.Report = require('./report.model');
 module.exports.DailyLimits = require('./dailyLimits.model');
+module.exports.SkillGapCreation = require('./skillGapCreation.model');

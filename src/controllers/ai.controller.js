@@ -8,6 +8,8 @@ const pdfParse = require('pdf-parse');
 const mammoth = require('mammoth');
 const WordExtractor = require('word-extractor');
 const { Job } = require('../models');
+const screeningService = require('../modules/applicant-screening/screening.service');
+const { uploadFileToS3 } = require('../utils/s3Upload');
 
 const generateGeminiContent = async (systemInstruction, prompt, generationConfig = {}) => {
   if (!config.gemini.apiKey) {
@@ -77,7 +79,7 @@ const extractResumeText = async (file) => {
 };
 
 const getOutcome = (score) => {
-  if (score <= 30) return 'rejected';
+  if (score < 30) return 'rejected';
   if (score <= 60) return 'needs_improvement';
   return 'eligible';
 };
@@ -334,7 +336,7 @@ const generateResumeMatch = catchAsync(async (req, res) => {
       }
     }
     const previousResume = String(req.body.previousResume || '').trim();
-    const threshold = Number(req.body.threshold) || 75;
+    const threshold = 60;
     const hasPreviousSubmission = Boolean(previousResume && previousAnalysis);
 
     const prompt = `You are a resume-to-job-description matching engine.
@@ -343,7 +345,7 @@ Extract the JD's required skills, preferred skills, and required experience year
 
 When both previous inputs are provided, classify the edit as genuine_improvement, keyword_stuffing, no_change, or unrelated_edit. Without both, use not_applicable. genuine_improvement requires new supporting context. keyword_stuffing means previously missing skills were added without supporting context.
 
-Set eligible_to_apply to true only when match_score >= ${threshold}, unverified_claims is empty, and gaming_flag is not keyword_stuffing. For keyword_stuffing, set a 7-day cooldown and require a repo, certificate, or portfolio link for each newly claimed skill.
+Set eligible_to_apply to true only when match_score > ${threshold}, unverified_claims is empty, and gaming_flag is not keyword_stuffing. For keyword_stuffing, set a 7-day cooldown and require a repo, certificate, or portfolio link for each newly claimed skill.
 
 Job title: ${job.projectTitle}
 Job category: ${job.designCategory || (job.category || []).join(', ')}
@@ -395,11 +397,8 @@ Return ONLY valid JSON in this exact shape, no preamble:
       result = {
         match_score: local.score, matched_skills: [], unverified_claims: [],
         missing_skills: local.missingSkills, gaming_flag: 'not_applicable',
-        improvement_suggestions: local.missingSkills.map((skill) => ({
-          skill, why_it_matters: 'Required by the job description.',
-          how_to_gain_it: `Build a practical project using ${skill}.`,
-          evidence_needed: 'Project, task, outcome, metric, repository, certificate, or portfolio link.',
-        })),
+        // Do not turn ordinary JD words into a misleading skills checklist when AI is unavailable.
+        improvement_suggestions: [],
       };
     }
     const cleanSkills = (items) => (Array.isArray(items) ? items.map(String).map((item) => item.trim()).filter(Boolean) : []);
@@ -409,9 +408,34 @@ Return ONLY valid JSON in this exact shape, no preamble:
     const missingSkills = cleanSkills(result.missing_skills);
     const flags = ['genuine_improvement', 'keyword_stuffing', 'no_change', 'unrelated_edit', 'not_applicable'];
     const gamingFlag = flags.includes(result.gaming_flag) ? result.gaming_flag : 'not_applicable';
-    const eligibleToApply = score >= threshold && unverifiedClaims.length === 0 && gamingFlag !== 'keyword_stuffing';
-    const suggestions = Array.isArray(result.improvement_suggestions) ? result.improvement_suggestions : [];
-    const suggestion = suggestions.map((item) => item.how_to_gain_it).filter(Boolean).join(' ');
+    const eligibleToApply = score > threshold && unverifiedClaims.length === 0 && gamingFlag !== 'keyword_stuffing';
+    let suggestions = Array.isArray(result.improvement_suggestions) ? result.improvement_suggestions : [];
+    let suggestion = suggestions.map((item) => item.how_to_gain_it).filter(Boolean).join(' ')
+      || buildLocalSuggestion(score, getOutcome(score), []);
+    let screening = null;
+    try {
+      screening = await screeningService.parseResume(resumeText, job.description);
+    } catch (error) {
+      // Screening is additive: an AI/parser/link-check failure must never block the legacy flow.
+      console.warn(`Applicant screening metadata unavailable; continuing legacy resume flow: ${error.message}`);
+    }
+    if (screening?.missingSkills?.length) {
+      suggestions = screening.missingSkills.map((item) => ({
+        skill: item.skill,
+        why_it_matters: item.whyItMatters,
+        how_to_gain_it: item.howToGainIt,
+        evidence_needed: false,
+      }));
+    }
+    if (screening?.suggestedDescription) suggestion = screening.suggestedDescription;
+    let resumeFile = null;
+    try {
+      const uploaded = await uploadFileToS3({ ...req.file, fieldname: 'resume' }, req.user.id);
+      resumeFile = { url: uploaded.url, key: uploaded.key, originalName: req.file.originalname, mimetype: req.file.mimetype, size: req.file.size };
+    } catch (error) {
+      console.warn(`Resume persistence unavailable; continuing without attachment: ${error.message}`);
+    }
+
     const analysisToken = eligibleToApply
       ? jwt.sign(
         {
@@ -421,6 +445,8 @@ Return ONLY valid JSON in this exact shape, no preamble:
           score,
           suggestion,
           missingSkills,
+          screening,
+          resumeFile,
         },
         config.jwt.secret,
         { expiresIn: '30m' },
@@ -428,6 +454,9 @@ Return ONLY valid JSON in this exact shape, no preamble:
       : null;
 
     return res.status(httpStatus.OK).json({
+      score,
+      outcome: getOutcome(score),
+      suggestion: suggestion || buildLocalSuggestion(score, getOutcome(score), missingSkills),
       match_score: score,
       matched_skills: matchedSkills,
       unverified_claims: unverifiedClaims,
@@ -436,6 +465,11 @@ Return ONLY valid JSON in this exact shape, no preamble:
       eligible_to_apply: eligibleToApply,
       improvement_suggestions: suggestions,
       cooldown_required_days: gamingFlag === 'keyword_stuffing' ? 7 : null,
+      parsed_skills: screening?.skills || null,
+      parsed_about: screening?.aboutSummary || null,
+      parsed_projects: screening?.projects || null,
+      flagged_projects: screening?.flaggedProjects || null,
+      evidence_projects: screening?.evidenceProjects || [],
       analysisToken,
     });
   } catch (error) {
@@ -459,7 +493,7 @@ Return ONLY valid JSON in this exact shape, no preamble:
 });
 
 const generateApplicationMessage = catchAsync(async (req, res) => {
-  const { jobId, score, missingSkills = [], recipientName = 'Recruiter' } = req.body;
+  const { jobId, score, missingSkills = [], parsedSkills = [], parsedAbout = '', recipientName = 'Recruiter' } = req.body;
   const job = await Job.findById(jobId).lean();
   if (!job) {
     return res.status(httpStatus.NOT_FOUND).json({ success: false, message: 'Job not found' });
@@ -472,6 +506,8 @@ const generateApplicationMessage = catchAsync(async (req, res) => {
 Job title: ${job.projectTitle}
 Job description: ${String(job.description || '').slice(0, 4000)}
 Resume match score: ${score}%
+Applicant resume skills: ${parsedSkills.join(', ') || 'Not available'}
+Applicant resume summary: ${parsedAbout || 'Not available'}
 Skills the applicant should improve: ${missingSkills.join(', ') || 'None identified'}
 
 Use the role details to make the message specific. Do not invent employers, years of experience, qualifications, or projects. Mention relevant fit confidently but honestly. Vary the opening and sentence structure naturally. Write 80 to 140 words. Return only JSON: {"message":"..."}`,

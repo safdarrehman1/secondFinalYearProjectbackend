@@ -11,6 +11,7 @@ const ChatService = require("../services/chat.service"); // Import ChatService
 const UserSpace = require("../models/userSpace.model"); // Import UserSpace model
 const reportService = require("../services/report.service");
 const { verifyResumeAnalysisToken } = require("./ai.controller");
+const screeningService = require("../modules/applicant-screening/screening.service");
 //const upload = require('../config/multer');
 
 const postJob = catchAsync(async (req, res) => {
@@ -141,6 +142,7 @@ const getJobById = catchAsync(async (req, res) => {
 
 const applyJob = catchAsync(async (req, res) => {
   let resumeAnalysis;
+  let questionnaireId = null;
   try {
     resumeAnalysis = verifyResumeAnalysisToken(
       req.body.applyJob.resumeAnalysisToken,
@@ -159,6 +161,12 @@ const applyJob = catchAsync(async (req, res) => {
     resumeMatchScore: resumeAnalysis.score,
     resumeMatchSuggestion: resumeAnalysis.suggestion,
     missingSkills: resumeAnalysis.missingSkills,
+    matchScore: resumeAnalysis.screening?.matchScore ?? resumeAnalysis.score,
+    parsedSkills: resumeAnalysis.screening?.skills,
+    parsedAbout: resumeAnalysis.screening?.aboutSummary,
+    parsedProjects: resumeAnalysis.screening?.projects,
+    flaggedProjects: resumeAnalysis.screening?.flaggedProjects,
+    resumeFile: resumeAnalysis.resumeFile,
     createdBy: req.user.id, // Associate the application with the current user
   };
   delete payload.resumeAnalysisToken;
@@ -177,7 +185,24 @@ const applyJob = catchAsync(async (req, res) => {
   // Apply for the job
   const appliedJob = await jobService.applyJob(payload);
 
-  res.status(httpStatus.CREATED).send(appliedJob);
+  // Questionnaire generation is deliberately best-effort and never rolls back an application.
+  try {
+    const job = await Job.findById(payload.jobId).lean();
+    const questionnaire = await screeningService.generateQuestionnaire(appliedJob, job);
+    questionnaireId = questionnaire._id;
+    appliedJob.screeningStatus = "test_pending";
+    await appliedJob.save();
+    appliedJob.set("questionnaireId", questionnaire._id, { strict: false });
+  } catch (error) {
+    console.warn(`Questionnaire generation failed; application remains in manual review: ${error.message}`);
+  }
+
+  res.status(httpStatus.CREATED).send({
+    ...appliedJob.toObject(),
+    questionnaireId,
+    testRequired: true,
+    testPath: `/applications/${appliedJob._id}/test`,
+  });
 });
 
 const getAppliedJobs = catchAsync(async (req, res) => {

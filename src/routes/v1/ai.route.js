@@ -8,6 +8,13 @@ const upload = require('../../config/multer');
 
 const router = express.Router();
 
+const applicationMessageLimiter = rateLimit({
+  windowMs: 24 * 60 * 60 * 1000,
+  max: 3,
+  keyGenerator: (req) => `${req.user?.id || req.ip}:${req.body?.jobId || 'unknown'}`,
+  handler: (_req, res) => res.status(429).json({ success: false, message: 'You can generate up to 3 messages for this application per day.' }),
+});
+
 // Rate limiter for AI autofill - 10 requests per hour per user
 const aiAutofillLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
@@ -49,7 +56,7 @@ router
   .route('/application-message')
   .post(
     auth(),
-    aiAutofillLimiter,
+    applicationMessageLimiter,
     validate(aiValidation.generateApplicationMessage),
     aiController.generateApplicationMessage
   );

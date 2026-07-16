@@ -30,6 +30,8 @@ const generateApplicationMessage = {
     score: Joi.number().integer().min(0).max(100).required(),
     missingSkills: Joi.array().items(Joi.string()).max(8).default([]),
     recipientName: Joi.string().max(100).optional().allow(''),
+    parsedSkills: Joi.array().items(Joi.string().max(100)).max(50).default([]),
+    parsedAbout: Joi.string().max(3000).optional().allow(''),
   }),
 };
 
