@@ -22,6 +22,10 @@ const orderRoutes = require('./order.route');
 const reportRoute = require('./report_new.route');
 const paypalRoutes = require('./payment.route');
 const config = require('../../config/config');
+const screeningRoute = require('../../modules/applicant-screening/screening.route');
+const screeningController = require('../../modules/applicant-screening/screening.controller');
+const auth = require('../../middlewares/auth');
+const skillGapCreationRoute = require('./skillGapCreation.route');
 
 const router = express.Router();
 
@@ -32,6 +36,8 @@ const defaultRoutes = [
   { path: '/job', route: jobsRoute },
   { path: '/chat-system', route: chatRoutes },
   { path: '/ai', route: aiRoute },
+  { path: '/applications', route: screeningRoute },
+  { path: '/skills-gap-creation', route: skillGapCreationRoute },
   { path: '/upload', route: uploadRoute },
   { path: '/contact-us', route: contactUsRoute },
   { path: '/blogs', route: blogRoute },
@@ -51,6 +57,7 @@ const defaultRoutes = [
 ];
 
 defaultRoutes.forEach((r) => router.use(r.path, r.route));
+router.get('/jobs/:jobId/applicants', auth(), screeningController.getApplicants);
 
 /* istanbul ignore next */
 if (config.env === 'development') {

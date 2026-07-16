@@ -1,6 +1,6 @@
 const httpStatus = require('http-status');
 const catchAsync = require('../utils/catchAsync');
-const Groq = require('groq-sdk');
+const axios = require('axios');
 const config = require('../config/config');
 const jwt = require('jsonwebtoken');
 const path = require('path');
@@ -8,11 +8,36 @@ const pdfParse = require('pdf-parse');
 const mammoth = require('mammoth');
 const WordExtractor = require('word-extractor');
 const { Job } = require('../models');
+const screeningService = require('../modules/applicant-screening/screening.service');
+const { uploadFileToS3 } = require('../utils/s3Upload');
 
-// Groq is optional so resume matching still works when the external AI service is unavailable.
-const groq = config.groq.apiKey
-  ? new Groq({ apiKey: config.groq.apiKey })
-  : null;
+const generateGeminiContent = async (systemInstruction, prompt, generationConfig = {}) => {
+  if (!config.gemini.apiKey) {
+    throw new Error('Gemini API key is not configured');
+  }
+
+  const response = await axios.post(
+    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(config.gemini.model)}:generateContent`,
+    {
+      systemInstruction: { parts: [{ text: systemInstruction }] },
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      generationConfig: {
+        temperature: config.gemini.temperature,
+        maxOutputTokens: config.gemini.maxTokens,
+        responseMimeType: 'application/json',
+        ...generationConfig,
+      },
+    },
+    { headers: { 'x-goog-api-key': config.gemini.apiKey } },
+  );
+
+  const text = response.data?.candidates?.[0]?.content?.parts
+    ?.map((part) => part.text || '')
+    .join('');
+  if (!text) throw new Error('Invalid AI response: no content returned');
+
+  return { text, usage: response.data.usageMetadata };
+};
 
 const wordExtractor = new WordExtractor();
 const MAX_RESUME_CHARACTERS = 18000;
@@ -54,7 +79,7 @@ const extractResumeText = async (file) => {
 };
 
 const getOutcome = (score) => {
-  if (score <= 30) return 'rejected';
+  if (score < 30) return 'rejected';
   if (score <= 60) return 'needs_improvement';
   return 'eligible';
 };
@@ -79,7 +104,7 @@ const buildLocalSuggestion = (score, outcome, missingSkills) => {
     return `Your resume currently has a ${score}% match with this job, but it needs stronger evidence before your application can move forward. Focus on improving ${gapText}, and update your resume with specific projects, responsibilities, and measurable outcomes that demonstrate your ability in these areas.`;
   }
 
-  return `Your resume has a ${score}% match with this job and demonstrates sufficient relevant experience to move forward. Continue highlighting your strongest role-specific projects and measurable outcomes, especially where they show direct experience with the tools and responsibilities requested in the job description.`;
+  return `Your resume has a ${score}% match with this job and demonstrates sufficient relevant experience to move forward. You can apply now, but you should still improve ${gapText} and add clear evidence of these skills, technologies, or tools to strengthen your application.`;
 };
 
 const analyzeResumeLocally = (job, resumeText) => {
@@ -192,28 +217,15 @@ Return ONLY valid JSON in this exact format:
   const startTime = Date.now();
 
   try {
-    // Call Groq API
-    const completion = await groq.chat.completions.create({
-      model: config.groq.model,
-      messages: [
-        {
-          role: "system",
-          content: "You are an expert creative director and copywriter specializing in portfolio curation for top-tier freelance platforms. You craft compelling, professional descriptions that highlight technical excellence, creative innovation, and market value. You understand architecture, design systems, branding strategy, UX principles, and creative best practices. Your descriptions are concise yet impactful, using industry-standard terminology that resonates with both clients and fellow professionals. You always respond with valid JSON only."
-        },
-        {
-          role: "user",
-          content: prompt
-        }
-      ],
-      temperature: config.groq.temperature,
-      max_tokens: config.groq.maxTokens,
-      response_format: { type: "json_object" }
-    });
+    const completion = await generateGeminiContent(
+      'You are an expert creative director and copywriter specializing in portfolio curation for top-tier freelance platforms. You craft compelling, professional descriptions that highlight technical excellence, creative innovation, and market value. You understand architecture, design systems, branding strategy, UX principles, and creative best practices. Your descriptions are concise yet impactful, using industry-standard terminology that resonates with both clients and fellow professionals. You always respond with valid JSON only.',
+      prompt,
+    );
 
     const responseTime = Date.now() - startTime;
 
     // Parse response
-    const result = JSON.parse(completion.choices[0].message.content);
+    const result = JSON.parse(completion.text);
 
     // Validate output - adjusted for longer descriptions
     if (!result.tags || !Array.isArray(result.tags) || result.tags.length < 5) {
@@ -241,8 +253,7 @@ Return ONLY valid JSON in this exact format:
     // Log success
     console.log(`AI Autofill Success - User: ${req.user.id}, Response Time: ${responseTime}ms`);
 
-    // Optional: Log tokens for monitoring (Groq is free)
-    console.log(`Groq API - Tokens: ${completion.usage.total_tokens}, Model: ${config.groq.model}`);
+    console.log(`Gemini API - Tokens: ${completion.usage?.totalTokenCount || 'unknown'}, Model: ${config.gemini.model}`);
 
     return res.status(httpStatus.OK).json({
       success: true,
@@ -253,8 +264,7 @@ Return ONLY valid JSON in this exact format:
   } catch (error) {
     console.error('AI Autofill Error:', error);
 
-    // Handle Groq API errors
-    if (error.code === 'rate_limit_exceeded' || error.status === 429) {
+    if (error.response?.status === 429 || error.status === 429) {
       return res.status(httpStatus.TOO_MANY_REQUESTS).json({
         success: false,
         message: 'API rate limit exceeded. Please try again later.',
@@ -262,7 +272,7 @@ Return ONLY valid JSON in this exact format:
       });
     }
 
-    if (error.code === 'invalid_api_key' || error.status === 401) {
+    if ([400, 401, 403].includes(error.response?.status || error.status)) {
       return res.status(httpStatus.INTERNAL_SERVER_ERROR).json({
         success: false,
         message: 'Server configuration error',
@@ -317,48 +327,63 @@ const generateResumeMatch = catchAsync(async (req, res) => {
       });
     }
 
-    const prompt = `You are an expert technical recruiter. Compare the applicant resume with the job description and provide a fair, evidence-based skills gap analysis.
+    let previousAnalysis = req.body.previousAnalysis;
+    if (typeof previousAnalysis === 'string' && previousAnalysis.trim()) {
+      try {
+        previousAnalysis = JSON.parse(previousAnalysis);
+      } catch (_) {
+        return res.status(httpStatus.BAD_REQUEST).json({ message: 'previousAnalysis must be valid JSON' });
+      }
+    }
+    const previousResume = String(req.body.previousResume || '').trim();
+    const threshold = 60;
+    const hasPreviousSubmission = Boolean(previousResume && previousAnalysis);
+
+    const prompt = `You are a resume-to-job-description matching engine.
+
+Extract the JD's required skills, preferred skills, and required experience years. For every skill in the resume, treat it as substantiated only when supported by a project, task, outcome, duration, or metric; otherwise treat it as listed_only. Compare required skills against substantiated evidence only. Bare keywords count as unverified_claims and score zero.
+
+When both previous inputs are provided, classify the edit as genuine_improvement, keyword_stuffing, no_change, or unrelated_edit. Without both, use not_applicable. genuine_improvement requires new supporting context. keyword_stuffing means previously missing skills were added without supporting context.
+
+Set eligible_to_apply to true only when match_score > ${threshold}, unverified_claims is empty, and gaming_flag is not keyword_stuffing. For keyword_stuffing, set a 7-day cooldown and require a repo, certificate, or portfolio link for each newly claimed skill.
 
 Job title: ${job.projectTitle}
 Job category: ${job.designCategory || (job.category || []).join(', ')}
 Job description:
 ${job.description}
 
-Applicant resume:
+Current resume:
 ${resumeText.slice(0, MAX_RESUME_CHARACTERS)}
 
-Return ONLY valid JSON in this exact format:
-{
-  "score": 0,
-  "missingSkills": ["skill"],
-  "suggestion": "One professional paragraph written directly to the applicant."
-}
+Previous resume:
+${hasPreviousSubmission ? previousResume.slice(0, MAX_RESUME_CHARACTERS) : 'Not provided'}
 
-Scoring rules:
-- score must be an integer from 0 to 100 based only on demonstrated job-relevant evidence
-- list the most important missing or insufficiently demonstrated skills
-- suggestion must be a concise professional paragraph explaining the gap and how the applicant can improve
-- do not invent resume experience or qualifications`;
+Previous analysis:
+${hasPreviousSubmission ? JSON.stringify(previousAnalysis) : 'Not provided'}
+
+Return ONLY valid JSON in this exact shape, no preamble:
+{
+  "match_score": 0,
+  "matched_skills": [],
+  "unverified_claims": [],
+  "missing_skills": [],
+  "gaming_flag": "not_applicable",
+  "eligible_to_apply": false,
+  "improvement_suggestions": [{ "skill": "", "why_it_matters": "", "how_to_gain_it": "", "evidence_needed": "" }],
+  "cooldown_required_days": null
+}`;
 
     let result;
-    if (groq) {
+    if (config.gemini.apiKey) {
       try {
-        const completion = await groq.chat.completions.create({
-          model: config.groq.model,
-          messages: [
-            {
-              role: 'system',
-              content: 'You are an expert hiring analyst. You assess resume-to-job fit objectively and always return valid JSON only.',
-            },
-            { role: 'user', content: prompt },
-          ],
-          temperature: 0.2,
-          max_tokens: 700,
-          response_format: { type: 'json_object' },
-        });
+        const completion = await generateGeminiContent(
+          'You are an expert hiring analyst. You assess resume-to-job fit objectively and always return valid JSON only.',
+          prompt,
+          { temperature: 0.2, maxOutputTokens: 700 },
+        );
 
-        const aiResult = JSON.parse(completion.choices[0].message.content);
-        if (!Number.isFinite(Number(aiResult.score)) || String(aiResult.suggestion || '').trim().length < 40) {
+        const aiResult = JSON.parse(completion.text);
+        if (!Number.isFinite(Number(aiResult.match_score)) || !Array.isArray(aiResult.matched_skills)) {
           throw new Error('Invalid AI response');
         }
         result = aiResult;
@@ -367,19 +392,51 @@ Scoring rules:
       }
     }
 
-    result = result || analyzeResumeLocally(job, resumeText);
-    const score = Math.max(0, Math.min(100, Math.round(Number(result.score) || 0)));
-    const missingSkills = Array.isArray(result.missingSkills)
-      ? result.missingSkills.slice(0, 8).map((skill) => String(skill).trim()).filter(Boolean)
-      : [];
-    const suggestion = String(result.suggestion || '').trim();
-
-    if (suggestion.length < 40) {
-      throw new Error('Invalid AI response: suggestion is too short');
+    if (!result) {
+      const local = analyzeResumeLocally(job, resumeText);
+      result = {
+        match_score: local.score, matched_skills: [], unverified_claims: [],
+        missing_skills: local.missingSkills, gaming_flag: 'not_applicable',
+        // Do not turn ordinary JD words into a misleading skills checklist when AI is unavailable.
+        improvement_suggestions: [],
+      };
+    }
+    const cleanSkills = (items) => (Array.isArray(items) ? items.map(String).map((item) => item.trim()).filter(Boolean) : []);
+    const score = Math.max(0, Math.min(100, Math.round(Number(result.match_score) || 0)));
+    const matchedSkills = cleanSkills(result.matched_skills);
+    const unverifiedClaims = cleanSkills(result.unverified_claims);
+    const missingSkills = cleanSkills(result.missing_skills);
+    const flags = ['genuine_improvement', 'keyword_stuffing', 'no_change', 'unrelated_edit', 'not_applicable'];
+    const gamingFlag = flags.includes(result.gaming_flag) ? result.gaming_flag : 'not_applicable';
+    const eligibleToApply = score > threshold && unverifiedClaims.length === 0 && gamingFlag !== 'keyword_stuffing';
+    let suggestions = Array.isArray(result.improvement_suggestions) ? result.improvement_suggestions : [];
+    let suggestion = suggestions.map((item) => item.how_to_gain_it).filter(Boolean).join(' ')
+      || buildLocalSuggestion(score, getOutcome(score), []);
+    let screening = null;
+    try {
+      screening = await screeningService.parseResume(resumeText, job.description);
+    } catch (error) {
+      // Screening is additive: an AI/parser/link-check failure must never block the legacy flow.
+      console.warn(`Applicant screening metadata unavailable; continuing legacy resume flow: ${error.message}`);
+    }
+    if (screening?.missingSkills?.length) {
+      suggestions = screening.missingSkills.map((item) => ({
+        skill: item.skill,
+        why_it_matters: item.whyItMatters,
+        how_to_gain_it: item.howToGainIt,
+        evidence_needed: false,
+      }));
+    }
+    if (screening?.suggestedDescription) suggestion = screening.suggestedDescription;
+    let resumeFile = null;
+    try {
+      const uploaded = await uploadFileToS3({ ...req.file, fieldname: 'resume' }, req.user.id);
+      resumeFile = { url: uploaded.url, key: uploaded.key, originalName: req.file.originalname, mimetype: req.file.mimetype, size: req.file.size };
+    } catch (error) {
+      console.warn(`Resume persistence unavailable; continuing without attachment: ${error.message}`);
     }
 
-    const outcome = getOutcome(score);
-    const analysisToken = outcome === 'eligible'
+    const analysisToken = eligibleToApply
       ? jwt.sign(
         {
           type: 'resume_match',
@@ -388,6 +445,8 @@ Scoring rules:
           score,
           suggestion,
           missingSkills,
+          screening,
+          resumeFile,
         },
         config.jwt.secret,
         { expiresIn: '30m' },
@@ -395,11 +454,22 @@ Scoring rules:
       : null;
 
     return res.status(httpStatus.OK).json({
-      success: true,
       score,
-      outcome,
-      missingSkills,
-      suggestion,
+      outcome: getOutcome(score),
+      suggestion: suggestion || buildLocalSuggestion(score, getOutcome(score), missingSkills),
+      match_score: score,
+      matched_skills: matchedSkills,
+      unverified_claims: unverifiedClaims,
+      missing_skills: missingSkills,
+      gaming_flag: gamingFlag,
+      eligible_to_apply: eligibleToApply,
+      improvement_suggestions: suggestions,
+      cooldown_required_days: gamingFlag === 'keyword_stuffing' ? 7 : null,
+      parsed_skills: screening?.skills || null,
+      parsed_about: screening?.aboutSummary || null,
+      parsed_projects: screening?.projects || null,
+      flagged_projects: screening?.flaggedProjects || null,
+      evidence_projects: screening?.evidenceProjects || [],
       analysisToken,
     });
   } catch (error) {
@@ -422,8 +492,103 @@ Scoring rules:
   }
 });
 
+const generateApplicationMessage = catchAsync(async (req, res) => {
+  const { jobId, score, missingSkills = [], parsedSkills = [], parsedAbout = '', recipientName = 'Recruiter' } = req.body;
+  const job = await Job.findById(jobId).lean();
+  if (!job) {
+    return res.status(httpStatus.NOT_FOUND).json({ success: false, message: 'Job not found' });
+  }
+
+  try {
+    const completion = await generateGeminiContent(
+      'You write concise, honest, polished job application messages tailored to the supplied role. Avoid generic filler, clichés, and repeated stock phrases. Return valid JSON only.',
+      `Write a unique, personalized application message from an applicant to ${recipientName || 'the recruiter'} for this job.
+Job title: ${job.projectTitle}
+Job description: ${String(job.description || '').slice(0, 4000)}
+Resume match score: ${score}%
+Applicant resume skills: ${parsedSkills.join(', ') || 'Not available'}
+Applicant resume summary: ${parsedAbout || 'Not available'}
+Skills the applicant should improve: ${missingSkills.join(', ') || 'None identified'}
+
+Use the role details to make the message specific. Do not invent employers, years of experience, qualifications, or projects. Mention relevant fit confidently but honestly. Vary the opening and sentence structure naturally. Write 80 to 140 words. Return only JSON: {"message":"..."}`,
+      { temperature: 0.65 },
+    );
+    const generated = JSON.parse(completion.text).message;
+    if (typeof generated !== 'string' || generated.trim().length < 50) {
+      throw new Error('Invalid AI response: application message is too short');
+    }
+    return res.status(httpStatus.OK).json({ success: true, message: generated.trim().slice(0, 1000) });
+  } catch (error) {
+    console.error(`Application message AI generation failed: ${error.message}`);
+    return res.status(503).json({
+      success: false,
+      message: 'AI could not generate the application message right now. Please try again.',
+      error: 'AI_GENERATION_FAILED',
+    });
+  }
+});
+
+const generateProfileAbout = catchAsync(async (req, res) => {
+  const { occupations = [], softwareTools = [], currentAbout = '' } = req.body;
+  try {
+    const completion = await generateGeminiContent(
+      'You write authentic, distinctive, polished professional profile biographies. Avoid generic filler, clichés, and reusable stock introductions. Return valid JSON only.',
+      `Write a unique first-person About Me biography for a professional profile.
+Occupations: ${occupations.join(', ') || 'Not specified'}
+Software tools: ${softwareTools.join(', ') || 'Not specified'}
+Existing notes: ${currentAbout || 'None'}
+
+Use the supplied details to create natural, specific prose with varied sentence structure. Use only the supplied facts; do not invent employers, qualifications, awards, clients, or years of experience. Keep it warm and professional in 90 to 150 words. Return only JSON: {"aboutMe":"..."}`,
+      { temperature: 0.7 },
+    );
+    const generated = JSON.parse(completion.text).aboutMe;
+    if (typeof generated !== 'string' || generated.trim().length < 80) {
+      throw new Error('Invalid AI response: profile biography is too short');
+    }
+    return res.status(httpStatus.OK).json({ success: true, aboutMe: generated.trim().slice(0, 3000) });
+  } catch (error) {
+    console.error(`Profile About AI generation failed: ${error.message}`);
+    return res.status(503).json({
+      success: false,
+      message: 'AI could not generate the profile description right now. Please try again.',
+      error: 'AI_GENERATION_FAILED',
+    });
+  }
+});
+
+const generateJobDescription = catchAsync(async (req, res) => {
+  const { prompt, jobTitle = '', category = '' } = req.body;
+  try {
+    const completion = await generateGeminiContent(
+      'You are a senior talent copywriter. You create distinctive, inclusive, professional job descriptions grounded strictly in the supplied role details. Avoid generic boilerplate, clichés, and repeated stock wording. Return valid JSON only.',
+      `Create a unique, complete job description from the recruiter's prompt.
+Job title: ${jobTitle || 'Not specified'}
+Category: ${category || 'Not specified'}
+Recruiter prompt: ${prompt}
+
+Adapt the structure and wording to this specific role. Include a concise overview, concrete responsibilities, required skills and tools, preferred experience, and expected outcomes only when supported by the prompt. Do not invent salary, company details, benefits, qualifications, or requirements. Avoid phrases such as "we are seeking a skilled professional" and "the successful candidate will" unless the context genuinely calls for them. Write 250 to 450 words. Return only JSON: {"description":"..."}`,
+      { temperature: 0.7 },
+    );
+    const generated = JSON.parse(completion.text).description;
+    if (typeof generated !== 'string' || generated.trim().length < 200) {
+      throw new Error('Invalid AI response: job description is too short');
+    }
+    return res.status(httpStatus.OK).json({ success: true, description: generated.trim().slice(0, 5000) });
+  } catch (error) {
+    console.error(`Job description AI generation failed: ${error.message}`);
+    return res.status(503).json({
+      success: false,
+      message: 'AI could not generate the job description right now. Please try again.',
+      error: 'AI_GENERATION_FAILED',
+    });
+  }
+});
+
 module.exports = {
   generateAutofill,
   generateResumeMatch,
+  generateApplicationMessage,
+  generateProfileAbout,
+  generateJobDescription,
   verifyResumeAnalysisToken,
 };

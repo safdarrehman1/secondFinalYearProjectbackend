@@ -52,8 +52,8 @@ const verifyCallback = (req, resolve, reject, requiredRights = []) => async (err
     const userRole = user.role || 'user';
     const hasRequiredRole = [...requiredRights, 'admin'].includes(userRole);
     
-    if (!hasRequiredRole) {
-      return reject(new ApiError(httpStatus.FORBIDDEN, 'Forbidden: Insufficient permissions'));
+    if (!hasRequiredRole && req.params.userId !== user.id) {
+      return reject(new ApiError(httpStatus.FORBIDDEN, 'Forbidden'));
     }
   }
 

@@ -1255,7 +1255,7 @@ const submitDelivery = async (req, res) => {
 
 // Accept a submitted delivery (sets status to 'complete')
 // Accept a submitted delivery (sets status to 'complete')
-const { ratingService } = require("../services");
+const ratingService = require("../services/rating.service");
 
 const acceptDelivery = async (req, res) => {
   try {

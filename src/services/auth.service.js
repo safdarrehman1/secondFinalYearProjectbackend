@@ -79,11 +79,10 @@ const logout = async (refreshToken) => {
     type: tokenTypes.REFRESH,
     blacklisted: false,
   });
-  if (refreshTokenDoc) {
-    await refreshTokenDoc.remove();
+  if (!refreshTokenDoc) {
+    throw new ApiError(httpStatus.NOT_FOUND, "Not found");
   }
-  // Jika tidak ditemukan, tetap sukses (idempotent logout)
-  return;
+  await refreshTokenDoc.remove();
 };
 
 /**
@@ -127,6 +126,7 @@ const resetPassword = async (resetPasswordToken, newPassword) => {
     await userService.updateUserById(user.id, { password: newPassword });
     await Token.deleteMany({ user: user.id, type: tokenTypes.RESET_PASSWORD });
   } catch (error) {
+    console.error("Reset Password Error Details:", error);
     throw new ApiError(httpStatus.UNAUTHORIZED, "Password reset failed");
   }
 };

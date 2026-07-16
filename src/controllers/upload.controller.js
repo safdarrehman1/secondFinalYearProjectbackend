@@ -67,6 +67,10 @@ const uploadImage = catchAsync(async (req, res) => {
       responseData = { profilePicture: s3Result.url, userId: user._id };
       message = 'Profile picture uploaded successfully';
       break;
+    case 'profileCV':
+      responseData = { profileCV: s3Result.url };
+      message = 'CV uploaded successfully';
+      break;
     case 'jobImage':
       responseData = { jobImage: s3Result.url };
       message = 'Job asset image uploaded successfully';

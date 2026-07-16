@@ -14,6 +14,8 @@ const addSpace = {
     companyOrStudio: Joi.string().allow(""), // tidak required
     aboutMe: Joi.string().required(),
     softwareTool: Joi.array().items(Joi.string()),
+    proficientMusicStyles: Joi.array().items(Joi.string()),
+    skilledInstruments: Joi.array().items(Joi.string()),
     linkedin: Joi.string().allow(""),
     // Removed commented social media fields
     x: Joi.string(),
@@ -58,6 +60,8 @@ const updateSpace = {
     websiteUrl: Joi.string().allow(""),
     aboutMe: Joi.string().allow(""),
     softwareTool: Joi.array().items(Joi.string()),
+    proficientMusicStyles: Joi.array().items(Joi.string()),
+    skilledInstruments: Joi.array().items(Joi.string()),
     // Removed commented social media fields
     x: Joi.string(),
     facebook: Joi.string(),

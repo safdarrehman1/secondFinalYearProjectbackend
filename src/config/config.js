@@ -70,17 +70,17 @@ const envVarsSchema = Joi.object()
     STRIPE_PUBLISHABLE_KEY: Joi.string().allow("").optional().description("Stripe publishable key"),
     STRIPE_SECRET_KEY: Joi.string().allow("").optional().description("Stripe secret key"),
     FRONTEND_URL: Joi.string().allow("").optional().description("Frontend application URL"),
-    // Groq AI configuration
-    GROQ_API_KEY: Joi.string().allow("").optional().description("Groq API key"),
-    GROQ_MODEL: Joi.string()
-      .default("mixtral-8x7b-32768")
-      .description("Groq model to use"),
-    GROQ_MAX_TOKENS: Joi.number()
-      .default(2048)
-      .description("Maximum tokens for Groq response"),
-    GROQ_TEMPERATURE: Joi.number()
+    // Gemini AI configuration
+    GEMINI_API_KEY: Joi.string().allow("").optional().description("Gemini API key"),
+    GEMINI_MODEL: Joi.string()
+      .default("gemini-3.5-flash")
+      .description("Gemini model to use"),
+    GEMINI_MAX_TOKENS: Joi.number()
+      .default(4096)
+      .description("Maximum tokens for Gemini response"),
+    GEMINI_TEMPERATURE: Joi.number()
       .default(0.8)
-      .description("Temperature for Groq response"),
+      .description("Temperature for Gemini response"),
     // Admin configuration
     ADMIN_EMAIL: Joi.string()
       .email()
@@ -106,7 +106,34 @@ module.exports = {
   env: envVars.NODE_ENV,
   port: envVars.PORT,
   mongoose: {
-    url: envVars.MONGODB_URL + (envVars.NODE_ENV === "test" ? "-test" : ""),
+    url: (() => {
+      let mongoUrl = envVars.MONGODB_URL;
+      if (envVars.NODE_ENV === "test") {
+        const qIndex = mongoUrl.indexOf("?");
+        if (qIndex !== -1) {
+          const basePart = mongoUrl.slice(0, qIndex);
+          const queryPart = mongoUrl.slice(qIndex);
+          const lastSlash = basePart.lastIndexOf("/");
+          if (lastSlash > 10) {
+            const beforeSlash = basePart.slice(0, lastSlash);
+            const dbName = basePart.slice(lastSlash);
+            mongoUrl = `${beforeSlash}${dbName}-test${queryPart}`;
+          } else {
+            mongoUrl = `${basePart}-test${queryPart}`;
+          }
+        } else {
+          const lastSlash = mongoUrl.lastIndexOf("/");
+          if (lastSlash > 10) {
+            const beforeSlash = mongoUrl.slice(0, lastSlash);
+            const dbName = mongoUrl.slice(lastSlash);
+            mongoUrl = `${beforeSlash}${dbName}-test`;
+          } else {
+            mongoUrl = `${mongoUrl}-test`;
+          }
+        }
+      }
+      return mongoUrl;
+    })(),
     options: {
       useCreateIndex: true,
       useNewUrlParser: true,
@@ -140,11 +167,11 @@ module.exports = {
   frontend: {
     url: envVars.FRONTEND_URL,
   },
-  groq: {
-    apiKey: envVars.GROQ_API_KEY,
-    model: envVars.GROQ_MODEL,
-    maxTokens: envVars.GROQ_MAX_TOKENS,
-    temperature: envVars.GROQ_TEMPERATURE,
+  gemini: {
+    apiKey: envVars.GEMINI_API_KEY,
+    model: envVars.GEMINI_MODEL,
+    maxTokens: envVars.GEMINI_MAX_TOKENS,
+    temperature: envVars.GEMINI_TEMPERATURE,
   },
   admin: {
     email: envVars.ADMIN_EMAIL,

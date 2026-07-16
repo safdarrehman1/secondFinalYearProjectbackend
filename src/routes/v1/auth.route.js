@@ -34,6 +34,7 @@ router.post(
   authController.sendVerificationEmail,
 );
 router.get("/verify-email", authController.verifyEmail);
+router.post("/verify-email", authController.verifyEmail);
 router.post(
   "/change-password",
   auth(),
