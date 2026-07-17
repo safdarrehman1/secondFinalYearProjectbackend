@@ -1343,10 +1343,15 @@ const acceptDelivery = async (req, res) => {
 // Admin: list orders with rejected cancellation requests (now admin_review status) OR support requests
 const getRejectedCancellationOrders = async (req, res) => {
   try {
-    // Find orders having pending support request AND initiatedBy exists
+    // Include both declined cancellations escalated to admin review and support requests.
     const orders = await Order.find({
-      "requestSupport.status": "pending",
-      "requestSupport.initiatedBy": { $exists: true, $ne: null },
+      $or: [
+        { cancellations: { $elemMatch: { status: "admin_review" } } },
+        {
+          "requestSupport.status": "pending",
+          "requestSupport.initiatedBy": { $exists: true, $ne: null },
+        },
+      ],
     })
       .select(
         "title status createdAt cancellations requestSupport recruiterId createdBy",
@@ -1356,9 +1361,30 @@ const getRejectedCancellationOrders = async (req, res) => {
       .populate("requestSupport.initiatedBy", "name email")
       .populate("cancellations.requestedBy", "name email");
 
-    // Shape response with support request info
+    // Normalize both workflows into one admin review response.
     const data = orders.map((o) => {
-      // Support request info
+      const cancellation = (o.cancellations || [])
+        .filter((item) => item.status === "admin_review")
+        .sort((a, b) => new Date(b.requestedAt) - new Date(a.requestedAt))[0];
+
+      if (cancellation) {
+        return {
+          orderId: o._id,
+          title: o.title || `Order #${o._id}`,
+          status: o.status,
+          buyer: o.recruiterId,
+          seller: o.createdBy,
+          reason: cancellation.reason || "Cancellation request",
+          declinedBy: cancellation.declinedByName || "Order participant",
+          declinedAt: cancellation.decidedAt || cancellation.requestedAt,
+          declinedById: cancellation.declinedBy,
+          cancellationStatus: "admin_review",
+          requiresAdminDecision: true,
+          attachments: cancellation.attachments || [],
+          requestedBy: cancellation.requestedBy,
+        };
+      }
+
       return {
         orderId: o._id,
         title: o.title || `Order #${o._id}`,
@@ -1366,15 +1392,15 @@ const getRejectedCancellationOrders = async (req, res) => {
         buyer: o.recruiterId,
         seller: o.createdBy,
         reason: o.requestSupport.reason || "Support Request",
-        declinedBy: "N/A", // Not applicable for support request
+        declinedBy: "N/A",
         declinedAt: o.requestSupport.initiatedAt,
         declinedById: null,
-        cancellationStatus: "support_requested", // Distinguish type
+        cancellationStatus: "support_requested",
         requiresAdminDecision: true,
-        attachments: [], // Attachments logic if added for support
+        attachments: [],
         description: o.requestSupport.description,
-        initiatedBy: o.requestSupport.initiatedBy, // Populated object or ID
-        requestedBy: o.requestSupport.initiatedBy, // Standardized field for frontend
+        initiatedBy: o.requestSupport.initiatedBy,
+        requestedBy: o.requestSupport.initiatedBy,
       };
     });
 
