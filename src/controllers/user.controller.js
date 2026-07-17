@@ -729,7 +729,7 @@ const getAllUsersAdmin = async (req, res) => {
     const userSpaces = await UserSpace.find({
       createdBy: { $in: users.map((u) => u._id.toString()) },
     });
-    const result = users.map((u) => {
+    const result = await Promise.all(users.map(async (u) => {
       const userSpace = userSpaces.find(
         (us) => us.createdBy === u._id.toString(),
       );
@@ -742,24 +742,30 @@ const getAllUsersAdmin = async (req, res) => {
             .map((id) => id.toString())
             .includes(u._id.toString()),
       );
+      const followers = users.filter(
+        (other) => Array.isArray(other.following) && other.following.some((id) => id.toString() === u._id.toString()),
+      ).length;
+      const likes = await userStatsService.calculateTotalLikes(u._id);
       return {
         id: u._id,
         username: userSpace
           ? userSpace.firstName + " " + userSpace.lastName
           : u.name,
         email: u.email,
+        role: u.role,
         country:
           (userSpace && userSpace.address ? userSpace.address : "").split(
             ",",
           )[0] || "-",
-        followers: u.following ? u.following.length : 0,
-        likes: 0,
-        orders: 0, // dummy
-        sales: 0, // dummy
-        lastLogin: u.lastLogin || "2025-06-01T00:00:00Z", // dummy
-        isBlock: isBlockedByOthers, // Cek apakah user ini diblokir oleh user lain
+        followers,
+        likes,
+        orders: u.buyerMetrics?.totalOrders || 0,
+        sales: u.sellerMetrics?.totalOrders || 0,
+        joinedAt: u.createdAt,
+        accountStatus: u.accountStatus || "active",
+        isBlock: isBlockedByOthers,
       };
-    });
+    }));
     res.status(200).json({ success: true, data: result });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
