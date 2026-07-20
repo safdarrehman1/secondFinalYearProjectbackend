@@ -190,6 +190,13 @@ const compileResumeHtml = (resume) => {
       .user-name { font-size: 30px; font-weight: 900; margin: 0; color: white; }
       .user-contact { font-size: 12px; opacity: 0.9; text-align: right; color: white; }
     `;
+  } else if (templateId === "executive") {
+    templateSpecificCss = `
+      body { font-family: 'Georgia', serif; color: #1e293b; line-height: 1.6; }
+      .header-container { text-align: left; border-bottom: 3px double ${themeColor}; padding-bottom: 15px; margin-bottom: 20px; }
+      .user-name { font-size: 32px; font-family: 'Georgia', serif; font-weight: 500; color: ${themeColor}; margin: 0 0 5px 0; }
+      .user-contact { font-size: 11px; color: #475569; font-weight: 600; line-height: 1.5; }
+    `;
   }
 
   return `
