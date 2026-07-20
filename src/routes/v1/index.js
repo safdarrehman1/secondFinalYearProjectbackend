@@ -26,6 +26,7 @@ const screeningRoute = require('../../modules/applicant-screening/screening.rout
 const screeningController = require('../../modules/applicant-screening/screening.controller');
 const auth = require('../../middlewares/auth');
 const skillGapCreationRoute = require('./skillGapCreation.route');
+const fulltimeApplicationRoute = require('./application.route');
 
 const router = express.Router();
 
@@ -37,6 +38,7 @@ const defaultRoutes = [
   { path: '/chat-system', route: chatRoutes },
   { path: '/ai', route: aiRoute },
   { path: '/applications', route: screeningRoute },
+  { path: '/fulltime-applications', route: fulltimeApplicationRoute },
   { path: '/skills-gap-creation', route: skillGapCreationRoute },
   { path: '/upload', route: uploadRoute },
   { path: '/contact-us', route: contactUsRoute },

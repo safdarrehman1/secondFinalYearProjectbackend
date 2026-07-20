@@ -16,4 +16,5 @@ module.exports.gigService = require("./gig.service");
 module.exports.servicesService = require("./services.service");
 module.exports.ratingService = require("./rating.service");
 module.exports.userStatsService = require("./userStats.service");
+module.exports.applicationService = require("./applicationService");
 // module.exports.reportService = require('./report.service');

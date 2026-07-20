@@ -208,32 +208,90 @@ const unfollowUser = async (req, res) => {
 
 const getMyFollowing = async (req, res) => {
   try {
-    const currentUserId = req.user.id; // Get the current user id from the auth middleware
-
-    // Find the current user by ID to get the following list (which is an array of user IDs)
+    const currentUserId = req.user.id;
     const currentUser = await userService.getUserById(currentUserId);
 
     if (!currentUser) {
       return res.status(404).json({ message: "User not found" });
     }
 
-    // Get the following user IDs (an array of ObjectIds)
-    const followingUserIds = currentUser.following;
-
-    if (!followingUserIds || followingUserIds.length === 0) {
-      return res.status(200).json({ following: [] }); // No users to follow
+    const followingUserIds = currentUser.following || [];
+    if (followingUserIds.length === 0) {
+      return res.status(200).json({ following: [] });
     }
 
-    // Fetch the details of users being followed by the current user
-    const followingUsers = await User.find({
-      _id: { $in: followingUserIds },
-    }).select("name email"); // Select only name and email fields
+    const UserSpace = require("../models/userSpace.model");
+    const followingUsers = await Promise.all(
+      followingUserIds.map(async (fId) => {
+        const u = await User.findById(fId).select("name email profilePicture");
+        if (!u) return null;
+        const uSpace = await UserSpace.findOne({ createdBy: u._id.toString() });
+        const displayName = uSpace
+          ? `${uSpace.firstName || ""} ${uSpace.lastName || ""}`.trim()
+          : u.name || "Creative Professional";
+        const rolesList =
+          uSpace?.creationOccupation?.length > 0
+            ? uSpace.creationOccupation
+            : [uSpace?.businessOccupation || "Developer"];
+        const locationAddr = uSpace?.address || uSpace?.city || uSpace?.location || "San Francisco, CA";
 
-    // Return the populated data
-    res.status(200).json({ following: followingUsers });
+        return {
+          id: u._id.toString(),
+          _id: u._id,
+          userName: displayName,
+          name: displayName,
+          email: u.email,
+          avatar: uSpace?.profilePicture || u.profilePicture || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=500&q=80",
+          profilePicture: uSpace?.profilePicture || u.profilePicture || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=500&q=80",
+          myRole: rolesList,
+          address: locationAddr,
+        };
+      })
+    );
+
+    res.status(200).json({ following: followingUsers.filter(Boolean) });
   } catch (error) {
-    console.error(error);
+    console.error("Error fetching following list:", error);
     res.status(500).json({ message: "Error fetching following list" });
+  }
+};
+
+const getMyFollowers = async (req, res) => {
+  try {
+    const currentUserId = req.user.id;
+    const followers = await User.find({ following: currentUserId }).select("name email profilePicture");
+
+    const UserSpace = require("../models/userSpace.model");
+    const followerUsers = await Promise.all(
+      followers.map(async (u) => {
+        const uSpace = await UserSpace.findOne({ createdBy: u._id.toString() });
+        const displayName = uSpace
+          ? `${uSpace.firstName || ""} ${uSpace.lastName || ""}`.trim()
+          : u.name || "Creative Professional";
+        const rolesList =
+          uSpace?.creationOccupation?.length > 0
+            ? uSpace.creationOccupation
+            : [uSpace?.businessOccupation || "Developer"];
+        const locationAddr = uSpace?.address || uSpace?.city || uSpace?.location || "San Francisco, CA";
+
+        return {
+          id: u._id.toString(),
+          _id: u._id,
+          userName: displayName,
+          name: displayName,
+          email: u.email,
+          avatar: uSpace?.profilePicture || u.profilePicture || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=500&q=80",
+          profilePicture: uSpace?.profilePicture || u.profilePicture || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=500&q=80",
+          myRole: rolesList,
+          address: locationAddr,
+        };
+      })
+    );
+
+    res.status(200).json({ followers: followerUsers.filter(Boolean) });
+  } catch (error) {
+    console.error("Error fetching followers list:", error);
+    res.status(500).json({ message: "Error fetching followers list" });
   }
 };
 
@@ -1061,6 +1119,7 @@ module.exports = {
   deleteUser,
   followUser,
   getMyFollowing,
+  getMyFollowers,
   getAllUsersAdmin,
   deleteUsersAdmin,
   sendMessageAdmin,
