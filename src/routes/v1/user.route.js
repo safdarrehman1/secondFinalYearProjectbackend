@@ -62,7 +62,8 @@ router
   .route("/follow/:userId")
   .delete(auth("recruiter", "user"), userController.unfollowUser); // Only authenticated users can follow
 
-router.route("/me/following").get(auth("user"), userController.getMyFollowing); // Only authenticated users can get their following list
+router.route("/me/following").get(auth("user"), userController.getMyFollowing);
+router.route("/me/followers").get(auth("user"), userController.getMyFollowers); // Only authenticated users can get their following list
 
 router
   .route("/admin/delete")

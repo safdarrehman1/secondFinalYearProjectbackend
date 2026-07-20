@@ -14,3 +14,6 @@ module.exports.Gig = require('./gig.model');
 module.exports.Report = require('./report.model');
 module.exports.DailyLimits = require('./dailyLimits.model');
 module.exports.SkillGapCreation = require('./skillGapCreation.model');
+module.exports.Application = require('./application.model');
+module.exports.Resume = require('./resume.model');
+

@@ -1,0 +1,23 @@
+const express = require("express");
+const auth = require("../../middlewares/auth");
+const upload = require("../../config/multer");
+const applicationController = require("../../controllers/applicationController");
+
+const router = express.Router();
+
+router.post(
+  "/apply/:jobId",
+  auth(),
+  upload.single("resume"),
+  applicationController.applyToJob
+);
+
+router.get("/my-applications", auth(), applicationController.getMyApplications);
+router.get("/job/:jobId", auth(), applicationController.listApplicationsForJob);
+router.get("/:applicationId", auth(), applicationController.getApplicationStatus);
+router.post("/:applicationId/generate-test", auth(), applicationController.generateTest);
+router.post("/:applicationId/submit-test", auth(), applicationController.submitTestAnswers);
+router.patch("/:applicationId/status", auth(), applicationController.updateApplicationStatus);
+router.delete("/:applicationId", auth(), applicationController.withdrawApplication);
+
+module.exports = router;

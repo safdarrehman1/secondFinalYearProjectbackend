@@ -93,6 +93,34 @@ const jobSchema = mongoose.Schema(
     paymentId: {
       type: String,
     },
+    employmentType: {
+      type: String,
+      enum: ["freelance-project", "full-time", "part-time", "contract", "internship"],
+      default: "freelance-project",
+    },
+    workMode: {
+      type: String,
+      enum: ["remote", "onsite", "hybrid"],
+      default: "remote",
+    },
+    applicationFlow: {
+      type: String,
+      enum: ["proposal", "resume-application"],
+      default: "proposal",
+    },
+    salaryRange: {
+      min: { type: Number },
+      max: { type: Number },
+      currency: { type: String, default: "USD" },
+    },
+    requiredExperience: {
+      type: String,
+    },
+    requiredSkills: [
+      {
+        type: String,
+      },
+    ],
   },
   {
     timestamps: true,
