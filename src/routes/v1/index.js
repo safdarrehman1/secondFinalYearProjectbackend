@@ -22,6 +22,7 @@ const orderRoutes = require('./order.route');
 const reportRoute = require('./report_new.route');
 const paypalRoutes = require('./payment.route');
 const config = require('../../config/config');
+const resumeRoute = require('./resume.route');
 const screeningRoute = require('../../modules/applicant-screening/screening.route');
 const screeningController = require('../../modules/applicant-screening/screening.controller');
 const auth = require('../../middlewares/auth');
@@ -56,6 +57,7 @@ const defaultRoutes = [
   { path: '/order', route: orderRoutes },
   { path: '/reports', route: reportRoute },
   { path: '/paypal', route: paypalRoutes },
+  { path: '/resumes', route: resumeRoute },
 ];
 
 defaultRoutes.forEach((r) => router.use(r.path, r.route));
