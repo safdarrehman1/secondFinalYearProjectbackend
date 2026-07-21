@@ -6,6 +6,14 @@ const User = require('../models/user.model');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const logger = require('../config/logger');
 
+const assertPaymentIntentOwnership = async (paymentIntentId, user) => {
+  const paymentIntent = await stripeService.getPaymentIntent(paymentIntentId);
+  if (user.role !== 'admin' && paymentIntent.metadata?.userId !== user.id) {
+    throw new ApiError(httpStatus.FORBIDDEN, 'You do not have access to this payment');
+  }
+  return paymentIntent;
+};
+
 /**
  * Get Stripe publishable key
  */
@@ -70,7 +78,15 @@ const getPaymentMethods = catchAsync(async (req, res) => {
  */
 const deletePaymentMethod = catchAsync(async (req, res) => {
   const { paymentMethodId } = req.params;
-  
+  const customer = await stripeService.getStripeCustomer(req.user.id);
+  const paymentMethod = await stripe.paymentMethods.retrieve(paymentMethodId);
+  const ownerCustomerId = typeof paymentMethod.customer === 'string'
+    ? paymentMethod.customer
+    : paymentMethod.customer?.id;
+  if (ownerCustomerId !== customer.id) {
+    throw new ApiError(httpStatus.FORBIDDEN, 'You do not have access to this payment method');
+  }
+
   await stripeService.deletePaymentMethod(paymentMethodId);
   
   res.status(httpStatus.OK).json({
@@ -133,6 +149,8 @@ const confirmPaymentIntent = catchAsync(async (req, res) => {
   const { paymentIntentId } = req.params;
   const { paymentMethodId } = req.body;
 
+  await assertPaymentIntentOwnership(paymentIntentId, req.user);
+
   const paymentIntent = await stripeService.confirmPaymentIntent(
     paymentIntentId,
     paymentMethodId
@@ -156,7 +174,7 @@ const confirmPaymentIntent = catchAsync(async (req, res) => {
 const getPaymentIntent = catchAsync(async (req, res) => {
   const { paymentIntentId } = req.params;
 
-  const paymentIntent = await stripeService.getPaymentIntent(paymentIntentId);
+  const paymentIntent = await assertPaymentIntentOwnership(paymentIntentId, req.user);
 
   res.status(httpStatus.OK).json({
     success: true,
@@ -176,6 +194,8 @@ const getPaymentIntent = catchAsync(async (req, res) => {
 const createRefund = catchAsync(async (req, res) => {
   const { paymentIntentId } = req.params;
   const { amount } = req.body;
+
+  await assertPaymentIntentOwnership(paymentIntentId, req.user);
 
   const refund = await stripeService.createRefund(paymentIntentId, amount);
 
@@ -275,7 +295,7 @@ const handleStripeCallback = catchAsync(async (req, res) => {
     });
 
     if (!user) {
-      console.error('Invalid or expired state in Stripe callback:', state);
+      console.error('Invalid or expired state in Stripe callback');
       return res.redirect(`${frontendUrl}/settings?stripe_error=callback_failed`);
     }
 

@@ -78,9 +78,10 @@ const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 const multer = require('multer');
 const path = require('path');
 
-const maxSize = 30 * 1024 * 1024; // 30MB
-const assetMaxSize = 500 * 1024 * 1024 * 1024; // 500GB for asset files (ZIP, RAR, etc.)
-const chatMaxSize = 100 * 1024 * 1024; // 100MB for chat attachments
+const megabyte = 1024 * 1024;
+const maxSize = Number(process.env.UPLOAD_MAX_MB || 30) * megabyte;
+const assetMaxSize = Number(process.env.ASSET_UPLOAD_MAX_MB || 500) * megabyte;
+const chatMaxSize = Number(process.env.CHAT_UPLOAD_MAX_MB || 100) * megabyte;
 
 // AWS SDK v3 setup
 const s3 = new S3Client({
@@ -223,7 +224,14 @@ async function uploadFileToS3(file, userId = 'anonymous') {
   else if (file.fieldname === 'assetImage') folder = 'uploads/asset-images';
   else if (file.fieldname === 'asset') folder = 'uploads/assets';
 
-  const finalFileName = `${Date.now()}-${file.originalname}`;
+  const safeBaseName = path
+    .basename(file.originalname, ext)
+    .normalize('NFKC')
+    .replace(/[^a-zA-Z0-9._-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 100) || 'file';
+  const safeExtension = ext.toLowerCase().replace(/[^a-z0-9.]/g, '');
+  const finalFileName = `${Date.now()}-${safeBaseName}${safeExtension}`;
   const key = `${folder}/${userId}/${finalFileName}`;
 
   const params = {

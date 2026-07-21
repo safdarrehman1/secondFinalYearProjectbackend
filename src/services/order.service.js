@@ -224,6 +224,18 @@ const getOrderById = async (orderId, currentUser) => {
   orderData.createdBy = createdBySpace;
   orderData.myRole = myRole;
 
+  // Orders accepted before the no-payment flow was corrected retained the
+  // request status even though their activity log records acceptance.
+  if (
+    orderData.status === "inprogress" &&
+    orderData.activities.some(
+      (activity) =>
+        activity.action === "accepted" || activity.toStatus === "accepted",
+    )
+  ) {
+    orderData.status = "accepted";
+  }
+
   return orderData;
 };
 
@@ -557,7 +569,9 @@ const getMyOrders = async (user) => {
   const meId = (user._id || user.id).toString();
   const orders = await Order.find({
     $or: [{ createdBy: meId }, { recruiterId: meId }],
-    status: { $in: ["accepted", "delivered", "complete", "cancel"] }, // Only show these 4 statuses
+    status: {
+      $in: ["inprogress", "accepted", "delivered", "revision", "complete", "cancel"],
+    },
   })
     .populate({
       path: "createdBy",

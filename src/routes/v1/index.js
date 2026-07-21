@@ -56,7 +56,7 @@ const defaultRoutes = [
   { path: '/clear-database', route: clearDatabaseRoute },
   { path: '/order', route: orderRoutes },
   { path: '/reports', route: reportRoute },
-  { path: '/paypal', route: paypalRoutes },
+  ...(config.env === 'development' ? [{ path: '/paypal', route: paypalRoutes }] : []),
   { path: '/resumes', route: resumeRoute },
 ];
 

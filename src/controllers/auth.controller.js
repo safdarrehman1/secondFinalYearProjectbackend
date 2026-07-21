@@ -108,7 +108,6 @@ const googleRegister = catchAsync(async (req, res) => {
   const isNewUser = userSpace ? false : true;
   // Generate token
   const tokens = await tokenService.generateAuthTokens(user);
-  console.log("Google user registered:", { user, tokens, isNewUser });
   res.status(httpStatus.OK).send({ user, tokens, isNewUser: isNewUser });
 });
 

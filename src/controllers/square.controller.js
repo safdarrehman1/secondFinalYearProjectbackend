@@ -54,8 +54,6 @@ const connectSquare = catchAsync(async (req, res) => {
       const token = req.query.token;
       const decoded = require('jsonwebtoken').verify(token, config.jwt.secret);
       userId = decoded.sub;
-      console.log('User ID from token:', userId);
-      
       await squareService.logSquareActivity('oauth_connect_token_verified', {
         userId: userId,
         tokenSource: 'query_param'
@@ -94,7 +92,6 @@ const connectSquare = catchAsync(async (req, res) => {
       squareOAuthState: state,
       squareOAuthExpiry: new Date(Date.now() + 300000) // 5 minutes
     });
-    console.log('State stored in database:', state);
     
     await squareService.logSquareActivity('oauth_connect_state_stored_db', {
       userId: userId
@@ -115,7 +112,6 @@ const connectSquare = catchAsync(async (req, res) => {
     });
   }
   
-  console.log('Generated state:', state);
   
   try {
     const oauthUrl = squareService.getOAuthUrl(state);
@@ -141,7 +137,6 @@ const connectSquare = catchAsync(async (req, res) => {
 
 const squareCallback = catchAsync(async (req, res) => {
   const { code, state, error } = req.query;
-  console.log('Square callback received:', { code: !!code, state, error });
   console.log('Frontend URL from config:', config.frontend?.url);
   console.log('Environment:', process.env.NODE_ENV);
   
@@ -188,7 +183,7 @@ const squareCallback = catchAsync(async (req, res) => {
   // Validate state format
   const stateParts = state.split('_');
   if (stateParts.length < 2) {
-    console.error('Invalid state format:', state);
+    console.error('Invalid state format');
     await squareService.logSquareActivity('oauth_callback_invalid_state_format', {
       state: state,
       frontendUrl: frontendUrl
@@ -197,12 +192,9 @@ const squareCallback = catchAsync(async (req, res) => {
   }
 
   // Verify state untuk security
-  console.log('Session state:', req.session?.squareState);
-  console.log('Received state:', state);
   
   // Check state from database first, then fallback to session
   const userId = stateParts[0];
-  console.log('Extracted userId from state:', userId);
   
   await squareService.logSquareActivity('oauth_callback_verify_state', {
     userId: userId,
@@ -963,11 +955,7 @@ const getSquareRawData = catchAsync(async (req, res) => {
  * This endpoint accepts a nonce from Square Web Payments SDK
  */
 const createSimplePayment = catchAsync(async (req, res) => {
-  console.log('=== CREATE SIMPLE PAYMENT START ===');
-  console.log('Request body:', req.body);
-  console.log('User:', req.user?.id);
-
-  const userId = req.user?.id || 'test-user-' + Date.now(); // Fallback for testing
+  const userId = req.user.id;
   const { 
     nonce, 
     amount, 

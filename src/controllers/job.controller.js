@@ -15,8 +15,6 @@ const screeningService = require("../modules/applicant-screening/screening.servi
 //const upload = require('../config/multer');
 
 const postJob = catchAsync(async (req, res) => {
-  console.log("Req.body in application post job:", req.body);
-  console.log("Position field:", req.body.position);
   const avatarPath = req.body.applicantAvatar || null;
   const backgroundImagePath = req.body.applicantBackgroundImage || null;
 

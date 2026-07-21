@@ -8,8 +8,12 @@ const ChatService = require("./services/chat.service");
 const UserService = require("./services/user.service");
 const { initializeCronJobs } = require("./utils/cronJobs");
 const AttachmentCleanupService = require("./services/attachmentCleanup.service");
+const jwt = require("jsonwebtoken");
+const { User } = require("./models");
+const { tokenTypes } = require("./config/tokens");
 
 let server;
+let shuttingDown = false;
 global.__databaseMongo;
 
 // Create HTTP server
@@ -18,9 +22,32 @@ const httpServer = http.createServer(app);
 // Initialize Socket.IO
 const io = new Server(httpServer, {
   cors: {
-    origin: "*", // Configured allowed origins
+    origin: config.cors.allowedOrigins,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
+    credentials: true,
   },
+});
+
+io.use(async (socket, next) => {
+  try {
+    const authorization = socket.handshake.headers.authorization || "";
+    const token = socket.handshake.auth?.token || authorization.replace(/^Bearer\s+/i, "");
+    if (!token) return next(new Error("Authentication required"));
+
+    const payload = jwt.verify(token, config.jwt.secret);
+    if (payload.type !== tokenTypes.ACCESS) return next(new Error("Invalid token type"));
+
+    const user = await User.findById(payload.sub).select("_id role isBlock accountStatus");
+    if (!user || user.isBlock || user.accountStatus === "cancelled") {
+      return next(new Error("User is not allowed to connect"));
+    }
+
+    socket.userId = user.id;
+    socket.userRole = user.role;
+    return next();
+  } catch (error) {
+    return next(new Error("Invalid or expired authentication token"));
+  }
 });
 mongoose.set("useFindAndModify", false); // Disable deprecated findAndModify warnings
 
@@ -64,23 +91,42 @@ process.on("uncaughtException", (err) => {
   process.exit(1);
 });
 
+const shutdown = async (signal) => {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  logger.info(`${signal} received; shutting down gracefully`);
+
+  const forceExit = setTimeout(() => {
+    logger.error("Graceful shutdown timed out");
+    process.exit(1);
+  }, 10000);
+  forceExit.unref();
+
+  io.close();
+  if (server) {
+    await new Promise((resolve) => server.close(resolve));
+  }
+  await mongoose.connection.close(false);
+  clearTimeout(forceExit);
+  process.exit(0);
+};
+
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));
+
 // Active users map (consider replacing with Redis for scalability)
 const activeUsers = new Map();
 
 // Socket.IO configuration
 io.on("connection", (socket) => {
-  console.log("User connected:", socket.id);
+  logger.info(`Socket connected user=${socket.userId} socket=${socket.id}`);
+  activeUsers.set(socket.userId, socket.id);
 
   // Handle user joining
-  socket.on("join", async ({ userId }, callback = () => {}) => {
+  socket.on("join", async (_payload = {}, callback = () => {}) => {
     try {
-      if (!userId) {
-        return callback({ success: false, message: "User ID is required" });
-      }
-
-      activeUsers.set(userId, socket.id);
-      console.log(`User ${userId} joined with socket ID ${socket.id}`);
-      callback({ success: true });
+      activeUsers.set(socket.userId, socket.id);
+      callback({ success: true, userId: socket.userId });
     } catch (error) {
       logger.error("Error in join event:", error);
       callback({ success: false, message: "Error joining chat" });
@@ -90,27 +136,27 @@ io.on("connection", (socket) => {
   // Handle sending messages
   socket.on(
     "sendMessage",
-    async ({ senderId, recipientId, message }, callback = () => {}) => {
+    async ({ recipientId, message } = {}, callback = () => {}) => {
       try {
-        if (!message.trim()) {
+        if (typeof message !== "string" || !message.trim() || !recipientId) {
           return callback({
             success: false,
-            message: "Message cannot be empty",
+            message: "Recipient and message are required",
           });
         }
 
         const chat = await ChatService.saveMessage(
-          senderId,
+          socket.userId,
           recipientId,
-          message,
+          message.trim(),
         );
 
         // Emit the message to the recipient if online
         const recipientSocketId = activeUsers.get(recipientId);
         if (recipientSocketId) {
           io.to(recipientSocketId).emit("receiveMessage", {
-            senderId,
-            message,
+            senderId: socket.userId,
+            message: message.trim(),
           });
         }
 
@@ -125,14 +171,15 @@ io.on("connection", (socket) => {
   // Handle blocking user
   socket.on(
     "blockUser",
-    async ({ userId, blockedUserId }, callback = () => {}) => {
+    async ({ blockedUserId } = {}, callback = () => {}) => {
       try {
-        await ChatService.blockUser(userId, blockedUserId);
+        if (!blockedUserId) return callback({ success: false, message: "Blocked user is required" });
+        await ChatService.blockUser(socket.userId, blockedUserId);
         const blockedSocketId = activeUsers.get(blockedUserId);
 
         if (blockedSocketId) {
           io.to(blockedSocketId).emit("userBlocked", {
-            message: `You have been blocked by User ${userId}`,
+            message: "You have been blocked by this user",
           });
         }
 
@@ -150,9 +197,10 @@ io.on("connection", (socket) => {
   // Handle reporting user
   socket.on(
     "reportUser",
-    async ({ userId, reportedUserId }, callback = () => {}) => {
+    async ({ reportedUserId } = {}, callback = () => {}) => {
       try {
-        await ChatService.reportUser(userId, reportedUserId);
+        if (!reportedUserId) return callback({ success: false, message: "Reported user is required" });
+        await ChatService.reportUser(socket.userId, reportedUserId);
         callback({
           success: true,
           message: `User ${reportedUserId} has been reported.`,
@@ -165,17 +213,18 @@ io.on("connection", (socket) => {
   );
 
   // Handle typing indicator
-  socket.on("typing", ({ senderId, recipientId }) => {
+  socket.on("typing", ({ recipientId } = {}) => {
     const recipientSocketId = activeUsers.get(recipientId);
     if (recipientSocketId) {
-      io.to(recipientSocketId).emit("userTyping", { senderId });
+      io.to(recipientSocketId).emit("userTyping", { senderId: socket.userId });
     }
   });
 
   // Handle read receipt
-  socket.on("markAsRead", async ({ userId, chatId }, callback = () => {}) => {
+  socket.on("markAsRead", async ({ chatId } = {}, callback = () => {}) => {
     try {
-      await ChatService.markMessagesAsRead(chatId, userId);
+      if (!chatId) return callback({ success: false, message: "Chat is required" });
+      await ChatService.markMessagesAsRead(chatId, socket.userId);
       callback({ success: true });
     } catch (error) {
       logger.error("Error marking messages as read:", error);
@@ -185,7 +234,7 @@ io.on("connection", (socket) => {
 
   // Handle user disconnect
   socket.on("disconnect", () => {
-    console.log("User disconnected:", socket.id);
+    logger.info(`Socket disconnected user=${socket.userId} socket=${socket.id}`);
     for (const [userId, socketId] of activeUsers.entries()) {
       if (socketId === socket.id) {
         activeUsers.delete(userId);

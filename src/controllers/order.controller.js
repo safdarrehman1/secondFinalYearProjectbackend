@@ -177,10 +177,11 @@ const acceptOrder = async (req, res) => {
     const orderId = req.params.orderId;
     const userId = req.user._id;
 
-    // Update order status to inprogress
+    // The order request is already in progress while awaiting a response.
+    // Persist a distinct accepted state so history and action eligibility agree.
     const updatedOrder = await orderService.updateOrderStatus(
       orderId,
-      "inprogress",
+      "accepted",
       "Order accepted",
       userId,
       "accepted",
@@ -194,7 +195,7 @@ const acceptOrder = async (req, res) => {
       description: updatedOrder.description,
       price: updatedOrder.price,
       delivery_time: updatedOrder.delivery_time,
-      status: "inprogress",
+      status: "accepted",
       acceptedBy: userId.toString(),
       acceptedAt: new Date(),
     };

@@ -9,8 +9,13 @@
   },
   "scripts": {
     "start": "node src/index.js",
-    "dev": "cross-env NODE_ENV=development nodemon src/index.js"
+    "dev": "cross-env NODE_ENV=development nodemon src/index.js",
+    "test": "jest --runInBand",
+    "test:coverage": "jest --coverage --runInBand",
+    "lint": "eslint src tests",
+    "check": "npm run lint && npm test"
   },
+  "packageManager": "npm@10.9.2",
   "keywords": [
     "node",
     "node.js",
@@ -34,10 +39,9 @@
     "prettier"
   ],
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.787.0",
-    "@aws-sdk/lib-storage": "^3.787.0",
+    "@aws-sdk/client-s3": "3.787.0",
+    "@aws-sdk/lib-storage": "3.787.0",
     "@paypal/paypal-server-sdk": "^0.6.1",
-    "aws-sdk": "^2.1692.0",
     "axios": "^1.11.0",
     "base-64": "^1.0.0",
     "bcryptjs": "^2.4.3",
@@ -49,8 +53,6 @@
     "express-mongo-sanitize": "^2.0.0",
     "express-rate-limit": "^5.0.0",
     "express-session": "^1.18.2",
-    "fs": "^0.0.1-security",
-    "fs.promises": "^0.1.2",
     "helmet": "^4.1.0",
     "http-status": "^1.4.0",
     "joi": "^17.3.0",
@@ -67,15 +69,11 @@
     "openai": "^6.9.1",
     "passport": "^0.4.0",
     "passport-jwt": "^4.0.1",
-    "path": "^0.12.7",
-    "paypal": "^1.0.1",
     "pdf-parse": "^1.1.1",
-    "pm2": "^5.1.0",
     "puppeteer": "^25.3.0",
     "resend": "^6.7.0",
     "socket.io": "^4.8.1",
     "square": "^43.0.1",
-    "stream": "^0.0.3",
     "stripe": "^18.4.0",
     "swagger-jsdoc": "^6.0.8",
     "swagger-ui-express": "^4.1.6",
@@ -84,8 +82,7 @@
     "validator": "^13.0.0",
     "winston": "^3.2.1",
     "word-extractor": "^1.0.4",
-    "xss-clean": "^0.1.1",
-    "yarn": "^1.22.22"
+    "xss-clean": "^0.1.1"
   },
   "devDependencies": {
     "coveralls": "^3.0.7",
@@ -99,7 +96,7 @@
     "eslint-plugin-security": "^1.4.0",
     "faker": "^5.1.0",
     "husky": "7.0.4",
-    "jest": "^26.0.1",
+    "jest": "^29.7.0",
     "lint-staged": "^11.0.0",
     "node-mocks-http": "^1.8.0",
     "nodemon": "^3.1.9",

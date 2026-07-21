@@ -31,6 +31,9 @@ const envVarsSchema = Joi.object()
         "any.required": "JWT_SECRET is required. Add a long random secret in Render environment variables.",
         "string.empty": "JWT_SECRET is empty. Add a long random secret in Render environment variables.",
       }),
+    SESSION_SECRET: Joi.string().min(32).optional(),
+    CORS_ORIGINS: Joi.string().optional(),
+    JSON_BODY_LIMIT: Joi.string().default("1mb"),
     JWT_ACCESS_EXPIRATION_MINUTES: Joi.number()
       .default(30)
       .description("minutes after which access tokens expire"),
@@ -102,9 +105,26 @@ if (error) {
   throw new Error(`Config validation error: ${error.message}`);
 }
 
+if (envVars.NODE_ENV === "production") {
+  if (!envVars.SESSION_SECRET) {
+    throw new Error("Config validation error: SESSION_SECRET is required in production");
+  }
+  if (!envVars.ADMIN_PASSWORD || envVars.ADMIN_PASSWORD === "password123") {
+    throw new Error("Config validation error: a strong ADMIN_PASSWORD is required in production");
+  }
+}
+
 module.exports = {
   env: envVars.NODE_ENV,
   port: envVars.PORT,
+  bodyLimit: envVars.JSON_BODY_LIMIT,
+  sessionSecret: envVars.SESSION_SECRET || envVars.JWT_SECRET,
+  cors: {
+    allowedOrigins: (envVars.CORS_ORIGINS || envVars.FRONTEND_URL || "http://localhost:3000")
+      .split(",")
+      .map((origin) => origin.trim())
+      .filter(Boolean),
+  },
   mongoose: {
     url: (() => {
       let mongoUrl = envVars.MONGODB_URL;

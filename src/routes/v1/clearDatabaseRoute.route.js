@@ -1,8 +1,9 @@
 const express = require("express");
 const { Job } = require("../../models");
+const auth = require("../../middlewares/auth");
 const router = express.Router();
 
-router.get("/", async (req, res) => {
+router.post("/", auth("admin"), async (req, res) => {
   try {
     await Promise.all([Job.deleteMany({})]);
 
