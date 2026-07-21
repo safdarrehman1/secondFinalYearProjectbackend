@@ -12,6 +12,11 @@ const orderSchema = mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "Chat",
     },
+    jobId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Job",
+      index: true,
+    },
 
     // Gig order fields
     buyer: {

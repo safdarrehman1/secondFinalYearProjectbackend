@@ -23,6 +23,25 @@ const applyToJob = catchAsync(async (req, res) => {
     throw new ApiError(httpStatus.NOT_FOUND, "Job not found");
   }
 
+  const expiryTime = job.expiresAt
+    ? new Date(job.expiresAt).getTime()
+    : job.createdAt && job.activePeriod
+      ? new Date(job.createdAt).getTime() + job.activePeriod * 24 * 60 * 60 * 1000
+      : null;
+  const hasStartedOrEnded =
+    job.orderTracking && job.orderTracking.status !== "not_started";
+
+  if (
+    job.status !== "active" ||
+    hasStartedOrEnded ||
+    (expiryTime && Date.now() >= expiryTime)
+  ) {
+    throw new ApiError(
+      httpStatus.BAD_REQUEST,
+      "This job is no longer accepting applications."
+    );
+  }
+
   if (job.applicationFlow !== "resume-application") {
     throw new ApiError(
       httpStatus.BAD_REQUEST,

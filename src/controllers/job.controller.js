@@ -139,6 +139,31 @@ const getJobById = catchAsync(async (req, res) => {
 });
 
 const applyJob = catchAsync(async (req, res) => {
+  const targetJob = await Job.findById(req.body.applyJob.jobId);
+  if (!targetJob) {
+    throw new ApiError(httpStatus.NOT_FOUND, "Job not found");
+  }
+  const expiryTime = targetJob.expiresAt
+    ? new Date(targetJob.expiresAt).getTime()
+    : targetJob.createdAt && targetJob.activePeriod
+      ? new Date(targetJob.createdAt).getTime() +
+        targetJob.activePeriod * 24 * 60 * 60 * 1000
+      : null;
+  const hasStartedOrEnded =
+    targetJob.orderTracking &&
+    targetJob.orderTracking.status !== "not_started";
+
+  if (
+    targetJob.status !== "active" ||
+    hasStartedOrEnded ||
+    (expiryTime && Date.now() >= expiryTime)
+  ) {
+    throw new ApiError(
+      httpStatus.BAD_REQUEST,
+      "This job is no longer accepting applications.",
+    );
+  }
+
   let resumeAnalysis;
   let questionnaireId = null;
   try {

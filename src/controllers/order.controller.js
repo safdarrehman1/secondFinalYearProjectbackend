@@ -4,7 +4,7 @@ const regexFilter = require("../utils/regexFilter");
 const ApiError = require("../utils/ApiError");
 const catchAsync = require("../utils/catchAsync");
 const { orderService } = require("../services");
-const { Order } = require("../models");
+const { Order, Job } = require("../models");
 const ChatService = require("../services/chat.service");
 const { uploadFileToS3 } = require("../utils/s3Upload");
 const stripeService = require("../services/stripe.service");
@@ -186,6 +186,18 @@ const acceptOrder = async (req, res) => {
       userId,
       "accepted",
     );
+
+    if (updatedOrder.jobId) {
+      await Job.findByIdAndUpdate(updatedOrder.jobId, {
+        $set: {
+          status: "inactive",
+          "orderTracking.orderId": updatedOrder._id,
+          "orderTracking.assignedTo": updatedOrder.createdBy,
+          "orderTracking.status": "in_progress",
+          "orderTracking.startedAt": new Date(),
+        },
+      });
+    }
 
     // Send "Order Accepted" card message to chat
     const cardData = {

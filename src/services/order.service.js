@@ -2,7 +2,7 @@ const Order = require("../models/order.model");
 const httpStatus = require("http-status");
 const ApiError = require("../utils/ApiError");
 const { Mongoose } = require("mongoose");
-const { UserSpace, Gig, User } = require("../models");
+const { UserSpace, Gig, User, Job } = require("../models");
 const transactionService = require("./transaction.service");
 const RatingService = require("./rating.service");
 const notificationService = require("./notification.service");
@@ -275,6 +275,17 @@ const updateOrderStatus = async (
   });
 
   await order.save();
+
+  if (order.jobId && status === "complete") {
+    await Job.findByIdAndUpdate(order.jobId, {
+      $set: {
+        status: "inactive",
+        "orderTracking.orderId": order._id,
+        "orderTracking.status": "completed",
+        "orderTracking.completedAt": new Date(),
+      },
+    });
+  }
 
   // Notification: Order Status Update
   try {
