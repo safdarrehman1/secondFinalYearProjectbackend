@@ -8,23 +8,54 @@ const screeningService = require("../modules/applicant-screening/screening.servi
 
 const wordExtractor = new WordExtractor();
 
-const aiJsonCall = async (systemInstruction, prompt, maxOutputTokens = 2500, temperature = 0.3) => {
+const aiJsonCall = async (systemInstruction, prompt, maxOutputTokens = 2500, temperature = 0.3, userId = null, endpoint = "unknown") => {
   if (!config.gemini.apiKey) {
     throw new Error("Gemini API key is not configured");
   }
-  const response = await axios.post(
-    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(config.gemini.model)}:generateContent`,
-    {
-      systemInstruction: { parts: [{ text: systemInstruction }] },
-      contents: [{ role: "user", parts: [{ text: prompt }] }],
-      generationConfig: { temperature, maxOutputTokens, responseMimeType: "application/json" },
-    },
-    { headers: { "x-goog-api-key": config.gemini.apiKey }, timeout: 20000 }
-  );
+  const { logAiRequest } = require("./aiLogger.service");
+  const startTime = Date.now();
 
-  const text = response.data?.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("");
-  if (!text) throw new Error("AI returned no content");
-  return JSON.parse(text);
+  try {
+    const response = await axios.post(
+      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(config.gemini.model)}:generateContent`,
+      {
+        systemInstruction: { parts: [{ text: systemInstruction }] },
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        generationConfig: { temperature, maxOutputTokens, responseMimeType: "application/json" },
+      },
+      { headers: { "x-goog-api-key": config.gemini.apiKey }, timeout: 20000 }
+    );
+
+    const text = response.data?.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("");
+    if (!text) throw new Error("AI returned no content");
+
+    const usage = response.data.usageMetadata || {};
+    const latencyMs = Date.now() - startTime;
+
+    logAiRequest({
+      userId,
+      endpoint,
+      model: config.gemini.model,
+      promptTokens: usage.promptTokenCount || 0,
+      completionTokens: usage.candidatesTokenCount || 0,
+      totalTokens: usage.totalTokenCount || 0,
+      latencyMs,
+      status: "success",
+    });
+
+    return JSON.parse(text);
+  } catch (error) {
+    const latencyMs = Date.now() - startTime;
+    logAiRequest({
+      userId,
+      endpoint,
+      model: config.gemini.model,
+      latencyMs,
+      status: "failed",
+      errorMessage: error.message,
+    });
+    throw error;
+  }
 };
 
 const extractResumeText = async (file) => {
@@ -56,11 +87,11 @@ const extractResumeText = async (file) => {
   throw new Error("Unsupported resume format. Upload a PDF, DOC, DOCX, or TXT file.");
 };
 
-const parseResume = async (resumeText, jobDescription = "") => {
+const parseResume = async (resumeText, jobDescription = "", userId = null) => {
   if (!resumeText || resumeText.trim().length < 50) {
     throw new Error("Resume text is too short or empty.");
   }
-  return screeningService.parseResume(resumeText, jobDescription);
+  return screeningService.parseResume(resumeText, jobDescription, userId);
 };
 
 const scoreMatch = async (parsedResume, job, resumeText = "") => {
@@ -121,7 +152,7 @@ const scoreMatch = async (parsedResume, job, resumeText = "") => {
   };
 };
 
-const generateScreeningTest = async (parsedResume, job) => {
+const generateScreeningTest = async (parsedResume, job, userId = null) => {
   const jobTitle = job.projectTitle || job.position || "Role";
   const requiredSkills = (job.requiredSkills || []).join(", ");
   const description = String(job.description || "").slice(0, 5000);
@@ -168,7 +199,9 @@ Return JSON in this exact structure:
       "You are an expert technical interviewer crafting tailored pre-screening tests. Return valid JSON only.",
       prompt,
       3000,
-      0.5
+      0.5,
+      userId,
+      "/v1/applications/screening-test"
     );
     rawQuestions = Array.isArray(result.questions) ? result.questions : [];
   } catch (err) {
@@ -242,7 +275,7 @@ Return JSON in this exact structure:
   return questions;
 };
 
-const evaluateTestAnswers = async (testQuestions, answers) => {
+const evaluateTestAnswers = async (testQuestions, answers, userId = null) => {
   const answerMap = new Map((answers || []).map((a) => [String(a.questionId), String(a.answer || "")]));
   let mcqTotal = 0;
   let mcqCorrect = 0;
@@ -276,7 +309,9 @@ Return JSON: {"score": 85, "feedback": "Demonstrated strong knowledge of core pr
         "You are an expert hiring evaluator scoring candidate technical screening tests.",
         prompt,
         1000,
-        0.2
+        0.2,
+        userId,
+        "/v1/applications/evaluate-test"
       );
 
       evaluationScore = Math.max(0, Math.min(100, Math.round(Number(aiEval.score) || mcqScore)));

@@ -126,6 +126,7 @@ const chatAssist = catchAsync(async (req, res) => {
     sectionType: sectionType || "Summary",
     existingContent: existingContent || "",
     title: title || "",
+    userId: req.user?.id,
   });
 
   res.status(httpStatus.OK).json({

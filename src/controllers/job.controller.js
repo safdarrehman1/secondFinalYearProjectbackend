@@ -74,19 +74,42 @@ const getJobs = catchAsync(async (req, res) => {
 
 const saveJob = catchAsync(async (req, res) => {
   const { jobId } = req.params;
-
-  // Use $addToSet to ensure the user ID is added only once
-  const savedJob = await Job.findByIdAndUpdate(
-    jobId,
-    { $addToSet: { savedBy: req.user.id } }, // $addToSet avoids duplicates
-    { new: true },
-  );
-
-  if (!savedJob) {
+  const job = await Job.findById(jobId);
+  if (!job) {
     throw new ApiError(httpStatus.NOT_FOUND, "Job not found");
   }
 
-  res.send(savedJob);
+  const userId = String(req.user.id);
+  const savedBy = (job.savedBy || []).map(String);
+  const isSaved = savedBy.includes(userId);
+  job.savedBy = isSaved
+    ? savedBy.filter((id) => id !== userId)
+    : [...savedBy, userId];
+  await job.save();
+
+  res.send({ success: true, data: { jobId: job.id, isSaved: !isSaved } });
+});
+
+const getSavedJobs = catchAsync(async (req, res) => {
+  const page = Math.max(Number.parseInt(req.query.page, 10) || 1, 1);
+  const limit = Math.min(
+    Math.max(Number.parseInt(req.query.limit, 10) || 12, 1),
+    50,
+  );
+  const filter = { savedBy: String(req.user.id) };
+  const [jobs, total] = await Promise.all([
+    Job.find(filter)
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit),
+    Job.countDocuments(filter),
+  ]);
+
+  res.send({
+    success: true,
+    data: jobs,
+    pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+  });
 });
 
 const getMyJobs = catchAsync(async (req, res) => {
@@ -337,6 +360,7 @@ module.exports = {
   updateJob,
   getJob,
   saveJob,
+  getSavedJobs,
   getMyJobs,
   getMyJobs2,
   changeJobStatus,

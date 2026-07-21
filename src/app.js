@@ -12,6 +12,7 @@ const morgan = require("./config/morgan");
 const { jwtStrategy } = require("./config/passport");
 const { authLimiter, apiLimiter } = require("./middlewares/rateLimiter");
 const routes = require("./routes/v1");
+const filtrationRoutes = require("./modules/job-filtration/filtration.route");
 const { errorConverter, errorHandler } = require("./middlewares/error");
 const ApiError = require("./utils/ApiError");
 const AttachmentCleanupService = require("./services/attachmentCleanup.service");
@@ -80,6 +81,7 @@ app.get("/ready", (req, res) => {
 });
 // v1 api routes
 app.use("/v1", apiLimiter, routes);
+app.use("/api", apiLimiter, filtrationRoutes);
 
 app.get("/", (req, res) => {
   res.send("Welcome! Backend Tech Hiring App Running Normally. v4");

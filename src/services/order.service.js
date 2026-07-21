@@ -251,8 +251,10 @@ const updateOrderStatus = async (
     throw new ApiError(httpStatus.NOT_FOUND, "Order not found");
   }
 
-  // Update status and message based on the status type
   const prevStatus = order.status;
+  require("./order-lifecycle.service").assertTransition(prevStatus, status);
+
+  // Update status and message based on the status type
   order.status = status;
   if (status === "revision") {
     order.revison_message = message;
@@ -286,7 +288,9 @@ const updateOrderStatus = async (
       },
     });
   }
-
+  if (["revision", "disputed", "complete", "cancel"].includes(status)) {
+    order.autoCompleteAt = undefined;
+  }
   // Notification: Order Status Update
   try {
     const recipient =
@@ -379,7 +383,15 @@ const updateOrderStatus = async (
 
 const addReviewAndRating = async (
   orderId,
-  { rating, review, tip, actorId = null, buyerRating, buyerReview },
+  {
+    rating,
+    review,
+    tip,
+    actorId = null,
+    buyerRating,
+    buyerReview,
+    reviewCategories,
+  },
 ) => {
   // Find the order by ID
   const order = await Order.findById(orderId);
@@ -399,11 +411,27 @@ const addReviewAndRating = async (
       "Only the buyer can leave a review for this order",
     );
   }
+  if (order.status !== "complete") {
+    throw new ApiError(
+      httpStatus.CONFLICT,
+      "Reviews can only be submitted for completed orders",
+    );
+  }
+  if (order.createdBy.toString() === buyerId.toString()) {
+    throw new ApiError(httpStatus.BAD_REQUEST, "You cannot review yourself");
+  }
+  if (order.buyerReviewAt) {
+    throw new ApiError(
+      httpStatus.CONFLICT,
+      "A review has already been submitted for this order",
+    );
+  }
 
   // Map incoming data to buyer fields (Rating FOR the Seller)
   order.buyerRating = buyerRating || rating;
   order.buyerReview = buyerReview || review;
   order.buyerReviewAt = new Date();
+  order.reviewCategories = reviewCategories;
 
   // For backward compatibility with legacy fields if needed
   order.rating = order.buyerRating;
@@ -539,7 +567,7 @@ const submitReviewReply = async (orderId, reply, actorId) => {
   }
 
   // Verify reply doesn't already exist
-  if (order.buyerReviewReply) {
+  if (order.sellerReply) {
     throw new ApiError(httpStatus.BAD_REQUEST, "Reply already submitted");
   }
 
@@ -717,6 +745,7 @@ const getUserSellerReviews = async (userId) => {
   return Order.find({
     createdBy: userId,
     status: "complete",
+    "reviewModeration.status": { $ne: "hidden" },
     $or: [
       { buyerRating: { $exists: true, $gt: 0 } },
       { buyerReview: { $exists: true, $ne: "" } },
@@ -724,9 +753,80 @@ const getUserSellerReviews = async (userId) => {
   })
     .populate("recruiterId", "name profilePicture")
     .select(
-      "buyerRating buyerReview buyerReviewAt sellerReply sellerRepliedAt createdAt recruiterId title",
+      "buyerRating buyerReview buyerReviewAt buyerReviewEditedAt reviewCategories sellerReply sellerRepliedAt createdAt recruiterId title",
     )
     .sort({ createdAt: -1 });
+};
+
+const editReview = async (orderId, actorId, reviewData) => {
+  const order = await Order.findById(orderId);
+  if (!order) throw new ApiError(httpStatus.NOT_FOUND, "Order not found");
+
+  const buyerId = order.recruiterId || order.buyer;
+  if (!buyerId || buyerId.toString() !== actorId.toString()) {
+    throw new ApiError(httpStatus.FORBIDDEN, "Only the reviewer can edit this review");
+  }
+  if (!order.buyerReviewAt) {
+    throw new ApiError(httpStatus.NOT_FOUND, "Review not found");
+  }
+
+  const editDeadline = new Date(order.buyerReviewAt).getTime() + 24 * 60 * 60 * 1000;
+  if (Date.now() > editDeadline) {
+    throw new ApiError(httpStatus.CONFLICT, "The 24-hour review edit window has ended");
+  }
+
+  order.buyerRating = reviewData.rating;
+  order.buyerReview = reviewData.review;
+  order.rating = reviewData.rating;
+  order.review = reviewData.review;
+  order.reviewCategories = reviewData.reviewCategories;
+  order.buyerReviewEditedAt = new Date();
+  order.activities.push({
+    action: "review_edited",
+    by: actorId,
+    note: "Buyer edited their review",
+  });
+  await order.save();
+  await RatingService.updateUserMetrics(order.createdBy);
+  return order;
+};
+
+const reportReview = async (orderId, actorId, reason) => {
+  const order = await Order.findById(orderId);
+  if (!order) throw new ApiError(httpStatus.NOT_FOUND, "Order not found");
+  if (!order.buyerReviewAt) {
+    throw new ApiError(httpStatus.NOT_FOUND, "Review not found");
+  }
+
+  const participants = [order.createdBy, order.recruiterId || order.buyer]
+    .filter(Boolean)
+    .map(String);
+  if (!participants.includes(String(actorId))) {
+    throw new ApiError(httpStatus.FORBIDDEN, "Only order participants can report this review");
+  }
+  if (!order.reviewModeration) {
+    order.reviewModeration = { status: "visible", reports: [] };
+  }
+  const reports = order.reviewModeration.reports || [];
+  if (reports.some((report) => String(report.reportedBy) === String(actorId))) {
+    throw new ApiError(httpStatus.CONFLICT, "You have already reported this review");
+  }
+
+  order.reviewModeration.status = "reported";
+  order.reviewModeration.reports.push({ reportedBy: actorId, reason });
+  await order.save();
+  return order.reviewModeration;
+};
+
+const moderateReview = async (orderId, status) => {
+  const order = await Order.findById(orderId);
+  if (!order) throw new ApiError(httpStatus.NOT_FOUND, "Order not found");
+  if (!order.buyerReviewAt) {
+    throw new ApiError(httpStatus.NOT_FOUND, "Review not found");
+  }
+  order.reviewModeration.status = status;
+  await order.save();
+  return order.reviewModeration;
 };
 
 module.exports = {
@@ -738,6 +838,9 @@ module.exports = {
   getMyOrders,
   getCompletedOrders,
   getUserSellerReviews, // Export the new function
+  editReview,
+  reportReview,
+  moderateReview,
   async extendDelivery(orderId, extraDays, actorId) {
     if (!Number.isFinite(extraDays) || extraDays <= 0) {
       throw new ApiError(

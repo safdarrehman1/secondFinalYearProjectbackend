@@ -90,7 +90,7 @@ const applyToJob = catchAsync(async (req, res) => {
   let testData = { generatedAt: null, questions: [], submittedAt: null, answers: [], evaluation: null };
 
   try {
-    const questions = await applicationService.generateScreeningTest(parsedResume, job);
+    const questions = await applicationService.generateScreeningTest(parsedResume, job, applicantId);
     testData = {
       generatedAt: new Date(),
       questions,
@@ -229,7 +229,7 @@ const generateTest = catchAsync(async (req, res) => {
     );
   }
 
-  const questions = await applicationService.generateScreeningTest(application.parsedResume, application.job);
+  const questions = await applicationService.generateScreeningTest(application.parsedResume, application.job, req.user.id);
 
   application.test = {
     generatedAt: new Date(),
@@ -273,7 +273,7 @@ const submitTestAnswers = catchAsync(async (req, res) => {
     throw new ApiError(httpStatus.BAD_REQUEST, "Test answers have already been submitted.");
   }
 
-  const evaluation = await applicationService.evaluateTestAnswers(application.test.questions, answers || []);
+  const evaluation = await applicationService.evaluateTestAnswers(application.test.questions, answers || [], req.user.id);
 
   application.test.submittedAt = new Date();
   application.test.answers = answers || [];

@@ -345,34 +345,64 @@ const generateSectionContent = async (prompt, context) => {
 
   const queryPrompt = `User Raw Input: "${prompt}"\nExisting Content in Section: "${context.existingContent || ""}"\nOther Resume Context (Title/Role): "${context.title || ""}"`;
 
-  const response = await axios.post(
-    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(config.gemini.model)}:generateContent`,
-    {
-      systemInstruction: { parts: [{ text: systemInstruction }] },
-      contents: [{ role: "user", parts: [{ text: queryPrompt }] }],
-      generationConfig: {
-        temperature: 0.3,
-        maxOutputTokens: 1024,
+  const { logAiRequest } = require("./aiLogger.service");
+  const startTime = Date.now();
+
+  try {
+    const response = await axios.post(
+      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(config.gemini.model)}:generateContent`,
+      {
+        systemInstruction: { parts: [{ text: systemInstruction }] },
+        contents: [{ role: "user", parts: [{ text: queryPrompt }] }],
+        generationConfig: {
+          temperature: 0.3,
+          maxOutputTokens: 1024,
+        },
       },
-    },
-    { headers: { "x-goog-api-key": config.gemini.apiKey } }
-  );
+      { headers: { "x-goog-api-key": config.gemini.apiKey } }
+    );
 
-  const text = response.data?.candidates?.[0]?.content?.parts
-    ?.map((part) => part.text || "")
-    .join("");
+    const text = response.data?.candidates?.[0]?.content?.parts
+      ?.map((part) => part.text || "")
+      .join("");
 
-  if (!text) {
-    throw new Error("Invalid response from Gemini AI client");
+    if (!text) {
+      throw new Error("Invalid response from Gemini AI client");
+    }
+
+    const usage = response.data.usageMetadata || {};
+    const latencyMs = Date.now() - startTime;
+
+    logAiRequest({
+      userId: context.userId,
+      endpoint: "/v1/resume/chat-assist",
+      model: config.gemini.model,
+      promptTokens: usage.promptTokenCount || 0,
+      completionTokens: usage.candidatesTokenCount || 0,
+      totalTokens: usage.totalTokenCount || 0,
+      latencyMs,
+      status: "success",
+    });
+
+    // Clean markdown blocks, code fences, stray quotes
+    return text
+      .replace(/^```[a-zA-Z]*\n/gm, "")
+      .replace(/```$/gm, "")
+      .replace(/^["']/g, "")
+      .replace(/["']$/g, "")
+      .trim();
+  } catch (error) {
+    const latencyMs = Date.now() - startTime;
+    logAiRequest({
+      userId: context.userId,
+      endpoint: "/v1/resume/chat-assist",
+      model: config.gemini.model,
+      latencyMs,
+      status: "failed",
+      errorMessage: error.message,
+    });
+    throw error;
   }
-
-  // Clean markdown blocks, code fences, stray quotes
-  return text
-    .replace(/^```[a-zA-Z]*\n/gm, "")
-    .replace(/```$/gm, "")
-    .replace(/^["']/g, "")
-    .replace(/["']$/g, "")
-    .trim();
 };
 
 module.exports = {

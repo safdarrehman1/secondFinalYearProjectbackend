@@ -1,6 +1,7 @@
 const httpStatus = require("http-status");
-const { Notification } = require("../models");
+const { Notification, User } = require("../models");
 const ApiError = require("../utils/ApiError");
+const emailService = require("./email.service");
 
 /**
  * Create a notification
@@ -14,13 +15,15 @@ const createNotification = async (
   message,
   data = {},
 ) => {
-  const notification = await Notification.create({
-    type,
-    receiver,
-    sender,
-    message,
-    data,
-  });
+  const preferenceByType = { application_status: "applications", job_application: "applications", test_status: "tests", interview_update: "interviews", message_received: "messages", order_message: "messages", order_review: "reviews", review_reply: "reviews" };
+  const preference = preferenceByType[type];
+  let receiverUser;
+  if (preference) { receiverUser = await User.findById(receiver).select(`email notificationPreferences.${preference} notificationPreferences.email`).lean(); if (receiverUser?.notificationPreferences?.[preference] === false) return null; }
+  const payload = { type, receiver, sender, message, data, dedupeKey: data.dedupeKey };
+  const notification = data.dedupeKey
+    ? await Notification.findOneAndUpdate({ dedupeKey: data.dedupeKey }, { $setOnInsert: payload }, { new: true, upsert: true, setDefaultsOnInsert: true })
+    : await Notification.create(payload);
+  if (preference && receiverUser?.notificationPreferences?.email !== false && receiverUser?.email) emailService.sendEmail(receiverUser.email, "Intelligent Hiring update", message, `<p>${String(message).replace(/[<>&]/g, "")}</p>`).catch(() => undefined);
   return notification;
 };
 

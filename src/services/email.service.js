@@ -1,11 +1,14 @@
 const { Resend } = require("resend");
 const config = require("../config/config");
 const logger = require("../config/logger");
+const { EmailLog } = require("../models");
 
 const resend = new Resend(config.email.resendApiKey);
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 /**
- * Send an email
+ * Send an email with retry logic and auditing
  * @param {string} to
  * @param {string} subject
  * @param {string} text
@@ -13,26 +16,59 @@ const resend = new Resend(config.email.resendApiKey);
  * @returns {Promise}
  */
 const sendEmail = async (to, subject, text, html) => {
-  try {
-    const { data, error } = await resend.emails.send({
-      from: config.email.from,
-      to,
-      subject,
-      text,
-      html,
-    });
+  let attempts = 0;
+  const maxAttempts = 3;
+  let lastError;
 
-    if (error) {
-      logger.error("Error sending email:", error);
-      throw new Error(error.message);
+  while (attempts < maxAttempts) {
+    attempts += 1;
+    try {
+      const { data, error } = await resend.emails.send({
+        from: config.email.from,
+        to,
+        subject,
+        text,
+        html,
+      });
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      logger.info(`Email sent successfully to ${to} on attempt ${attempts}`);
+      
+      // Async database logging
+      EmailLog.create({
+        to,
+        subject,
+        status: "success",
+        attempts,
+        responseId: data?.id,
+      }).catch((dbErr) => logger.error("Failed to write EmailLog success:", dbErr));
+
+      return data;
+    } catch (err) {
+      lastError = err;
+      logger.warn(`Email attempt ${attempts} to ${to} failed: ${err.message}`);
+      if (attempts < maxAttempts) {
+        const delay = Math.pow(2, attempts) * 1000;
+        await sleep(delay);
+      }
     }
-
-    logger.info("Email sent successfully:", data);
-    return data;
-  } catch (error) {
-    logger.error("Error sending email:", error);
-    throw error;
   }
+
+  logger.error(`Failed to send email to ${to} after ${maxAttempts} attempts: ${lastError.message}`);
+  
+  // Async database logging
+  EmailLog.create({
+    to,
+    subject,
+    status: "failed",
+    attempts: maxAttempts,
+    errorMessage: lastError.message,
+  }).catch((dbErr) => logger.error("Failed to write EmailLog failure:", dbErr));
+
+  throw lastError;
 };
 
 /**

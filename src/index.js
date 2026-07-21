@@ -27,6 +27,7 @@ const io = new Server(httpServer, {
     credentials: true,
   },
 });
+app.set("io", io);
 
 io.use(async (socket, next) => {
   try {
@@ -56,7 +57,7 @@ mongoose
   .connect(config.mongoose.url, config.mongoose.options)
   .then(() => {
     logger.info("Connected to MongoDB");
-    __databaseMongo = mongoose.connection.db;
+    global.__databaseMongo = mongoose.connection.db;
 
     // Initialize cron jobs (after DB connected)
     initializeCronJobs();
@@ -116,16 +117,20 @@ process.on("SIGINT", () => shutdown("SIGINT"));
 
 // Active users map (consider replacing with Redis for scalability)
 const activeUsers = new Map();
+const addActiveSocket = (userId, socketId) => { const sockets = activeUsers.get(String(userId)) || new Set(); sockets.add(socketId); activeUsers.set(String(userId), sockets); };
+const activeSocketIds = (userId) => [...(activeUsers.get(String(userId)) || [])];
 
 // Socket.IO configuration
 io.on("connection", (socket) => {
   logger.info(`Socket connected user=${socket.userId} socket=${socket.id}`);
-  activeUsers.set(socket.userId, socket.id);
+  addActiveSocket(socket.userId, socket.id);
+  socket.join(`candidate:${socket.userId}`);
+  io.emit("presence:update", { userId: socket.userId, online: true });
 
   // Handle user joining
   socket.on("join", async (_payload = {}, callback = () => {}) => {
     try {
-      activeUsers.set(socket.userId, socket.id);
+      addActiveSocket(socket.userId, socket.id);
       callback({ success: true, userId: socket.userId });
     } catch (error) {
       logger.error("Error in join event:", error);
@@ -136,7 +141,7 @@ io.on("connection", (socket) => {
   // Handle sending messages
   socket.on(
     "sendMessage",
-    async ({ recipientId, message } = {}, callback = () => {}) => {
+    async ({ recipientId, message, clientMessageId } = {}, callback = () => {}) => {
       try {
         if (typeof message !== "string" || !message.trim() || !recipientId) {
           return callback({
@@ -149,14 +154,17 @@ io.on("connection", (socket) => {
           socket.userId,
           recipientId,
           message.trim(),
+          null, [], "direct", null, clientMessageId || null,
         );
 
         // Emit the message to the recipient if online
-        const recipientSocketId = activeUsers.get(recipientId);
-        if (recipientSocketId) {
-          io.to(recipientSocketId).emit("receiveMessage", {
+        const recipientSocketIds = activeSocketIds(recipientId);
+        if (recipientSocketIds.length) {
+          io.to(recipientSocketIds).emit("receiveMessage", {
             senderId: socket.userId,
             message: message.trim(),
+            clientMessageId,
+            deliveredAt: new Date().toISOString(),
           });
         }
 
@@ -175,10 +183,10 @@ io.on("connection", (socket) => {
       try {
         if (!blockedUserId) return callback({ success: false, message: "Blocked user is required" });
         await ChatService.blockUser(socket.userId, blockedUserId);
-        const blockedSocketId = activeUsers.get(blockedUserId);
+        const blockedSocketIds = activeSocketIds(blockedUserId);
 
-        if (blockedSocketId) {
-          io.to(blockedSocketId).emit("userBlocked", {
+        if (blockedSocketIds.length) {
+          io.to(blockedSocketIds).emit("userBlocked", {
             message: "You have been blocked by this user",
           });
         }
@@ -214,9 +222,9 @@ io.on("connection", (socket) => {
 
   // Handle typing indicator
   socket.on("typing", ({ recipientId } = {}) => {
-    const recipientSocketId = activeUsers.get(recipientId);
-    if (recipientSocketId) {
-      io.to(recipientSocketId).emit("userTyping", { senderId: socket.userId });
+    const recipientSocketIds = activeSocketIds(recipientId);
+    if (recipientSocketIds.length) {
+      io.to(recipientSocketIds).emit("userTyping", { senderId: socket.userId });
     }
   });
 
@@ -225,6 +233,9 @@ io.on("connection", (socket) => {
     try {
       if (!chatId) return callback({ success: false, message: "Chat is required" });
       await ChatService.markMessagesAsRead(chatId, socket.userId);
+      const chat = await ChatService.getChatById(chatId);
+      const otherParticipants = (chat?.participants || []).filter((id) => String(id) !== String(socket.userId));
+      otherParticipants.forEach((participant) => io.to(activeSocketIds(participant)).emit("messagesRead", { chatId, readBy: socket.userId, readAt: new Date().toISOString() }));
       callback({ success: true });
     } catch (error) {
       logger.error("Error marking messages as read:", error);
@@ -235,11 +246,7 @@ io.on("connection", (socket) => {
   // Handle user disconnect
   socket.on("disconnect", () => {
     logger.info(`Socket disconnected user=${socket.userId} socket=${socket.id}`);
-    for (const [userId, socketId] of activeUsers.entries()) {
-      if (socketId === socket.id) {
-        activeUsers.delete(userId);
-        break;
-      }
-    }
+    const sockets = activeUsers.get(String(socket.userId));
+    if (sockets) { sockets.delete(socket.id); if (!sockets.size) { activeUsers.delete(String(socket.userId)); io.emit("presence:update", { userId: socket.userId, online: false }); } }
   });
 });

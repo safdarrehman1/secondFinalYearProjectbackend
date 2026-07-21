@@ -1,4 +1,4 @@
-const { AppliedJobs, Order } = require("../models");
+const { AppliedJobs, Order, User } = require("../models");
 const { Chat } = require("../models"); // Import the Chat model
 const mongoose = require("mongoose");
 
@@ -58,6 +58,7 @@ const ChatService = {
                 msg = msg.toObject();
               }
               msg.readby = true;
+              msg.readAt = new Date();
               hasChanges = true;
             }
             return msg;
@@ -137,6 +138,7 @@ const ChatService = {
     attachments = [],
     type = "direct",
     jobId = null,
+    clientMessageId = null,
   ) {
     try {
       console.log(recipientId, senderId, "id inside here ");
@@ -148,6 +150,8 @@ const ChatService = {
       // Convert sender and recipient IDs to ObjectId
       const senderObjectId = new mongoose.Types.ObjectId(senderId);
       const recipientObjectId = new mongoose.Types.ObjectId(recipientId);
+      const blocked = await User.findOne({ _id: { $in: [senderObjectId, recipientObjectId] }, blockedUsers: { $in: [senderObjectId, recipientObjectId] } }).select("_id").lean();
+      if (blocked) throw new Error("Messaging is unavailable because one participant blocked the other");
 
       // const card = message.split("||")[1] == "OrderRequestCard"
 
@@ -179,6 +183,8 @@ const ChatService = {
           createdAt: new Date(),
           cardData: cardData || null, // Ensure cardData is stored
           attachments: attachments || [],
+          clientMessageId: clientMessageId || undefined,
+          deliveredAt: new Date(),
         };
 
         console.log(
@@ -194,6 +200,7 @@ const ChatService = {
           jobId: jobId || undefined,
         });
       } else {
+        if (clientMessageId) { const existing = (chat.messages || []).find((item) => item.clientMessageId === clientMessageId && String(item.sender) === String(senderObjectId)); if (existing) return chat; }
         // Idempotency guard: avoid duplicate job application card messages
         if (
           type === "job_application" &&
@@ -223,6 +230,8 @@ const ChatService = {
           createdAt: new Date(),
           cardData: cardData || null, // Ensure cardData is stored
           attachments: attachments || [],
+          clientMessageId: clientMessageId || undefined,
+          deliveredAt: new Date(),
         };
 
         console.log("Adding new message:", JSON.stringify(newMessage, null, 2));
@@ -322,6 +331,8 @@ const ChatService = {
       chat.messages.forEach((message) => {
         if (message.sender !== userId && !message.read) {
           message.read = true; // Mark the message as read
+          message.readby = true;
+          message.readAt = new Date();
         }
       });
 

@@ -10,33 +10,62 @@ const WordExtractor = require('word-extractor');
 const { Job } = require('../models');
 const screeningService = require('../modules/applicant-screening/screening.service');
 const { uploadFileToS3 } = require('../utils/s3Upload');
+const { logAiRequest } = require('../services/aiLogger.service');
 
-const generateGeminiContent = async (systemInstruction, prompt, generationConfig = {}) => {
+const generateGeminiContent = async (systemInstruction, prompt, generationConfig = {}, userId = null, endpoint = "unknown") => {
   if (!config.gemini.apiKey) {
     throw new Error('Gemini API key is not configured');
   }
 
-  const response = await axios.post(
-    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(config.gemini.model)}:generateContent`,
-    {
-      systemInstruction: { parts: [{ text: systemInstruction }] },
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      generationConfig: {
-        temperature: config.gemini.temperature,
-        maxOutputTokens: config.gemini.maxTokens,
-        responseMimeType: 'application/json',
-        ...generationConfig,
+  const startTime = Date.now();
+  try {
+    const response = await axios.post(
+      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(config.gemini.model)}:generateContent`,
+      {
+        systemInstruction: { parts: [{ text: systemInstruction }] },
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: config.gemini.temperature,
+          maxOutputTokens: config.gemini.maxTokens,
+          responseMimeType: 'application/json',
+          ...generationConfig,
+        },
       },
-    },
-    { headers: { 'x-goog-api-key': config.gemini.apiKey } },
-  );
+      { headers: { 'x-goog-api-key': config.gemini.apiKey } },
+    );
 
-  const text = response.data?.candidates?.[0]?.content?.parts
-    ?.map((part) => part.text || '')
-    .join('');
-  if (!text) throw new Error('Invalid AI response: no content returned');
+    const text = response.data?.candidates?.[0]?.content?.parts
+      ?.map((part) => part.text || '')
+      .join('');
+    if (!text) throw new Error('Invalid AI response: no content returned');
 
-  return { text, usage: response.data.usageMetadata };
+    const usage = response.data.usageMetadata || {};
+    const latencyMs = Date.now() - startTime;
+
+    logAiRequest({
+      userId,
+      endpoint,
+      model: config.gemini.model,
+      promptTokens: usage.promptTokenCount || 0,
+      completionTokens: usage.candidatesTokenCount || 0,
+      totalTokens: usage.totalTokenCount || 0,
+      latencyMs,
+      status: 'success',
+    });
+
+    return { text, usage };
+  } catch (error) {
+    const latencyMs = Date.now() - startTime;
+    logAiRequest({
+      userId,
+      endpoint,
+      model: config.gemini.model,
+      latencyMs,
+      status: 'failed',
+      errorMessage: error.message,
+    });
+    throw error;
+  }
 };
 
 const wordExtractor = new WordExtractor();
@@ -220,6 +249,9 @@ Return ONLY valid JSON in this exact format:
     const completion = await generateGeminiContent(
       'You are an expert creative director and copywriter specializing in portfolio curation for top-tier freelance platforms. You craft compelling, professional descriptions that highlight technical excellence, creative innovation, and market value. You understand architecture, design systems, branding strategy, UX principles, and creative best practices. Your descriptions are concise yet impactful, using industry-standard terminology that resonates with both clients and fellow professionals. You always respond with valid JSON only.',
       prompt,
+      {},
+      req.user?.id,
+      req.originalUrl || "/api/autofill"
     );
 
     const responseTime = Date.now() - startTime;
@@ -380,6 +412,8 @@ Return ONLY valid JSON in this exact shape, no preamble:
           'You are an expert hiring analyst. You assess resume-to-job fit objectively and always return valid JSON only.',
           prompt,
           { temperature: 0.2, maxOutputTokens: 700 },
+          req.user?.id,
+          req.originalUrl || "/api/resume-match"
         );
 
         const aiResult = JSON.parse(completion.text);
@@ -414,7 +448,7 @@ Return ONLY valid JSON in this exact shape, no preamble:
       || buildLocalSuggestion(score, getOutcome(score), []);
     let screening = null;
     try {
-      screening = await screeningService.parseResume(resumeText, job.description);
+      screening = await screeningService.parseResume(resumeText, job.description, req.user.id);
     } catch (error) {
       // Screening is additive: an AI/parser/link-check failure must never block the legacy flow.
       console.warn(`Applicant screening metadata unavailable; continuing legacy resume flow: ${error.message}`);
@@ -512,6 +546,8 @@ Skills the applicant should improve: ${missingSkills.join(', ') || 'None identif
 
 Use the role details to make the message specific. Do not invent employers, years of experience, qualifications, or projects. Mention relevant fit confidently but honestly. Vary the opening and sentence structure naturally. Write 80 to 140 words. Return only JSON: {"message":"..."}`,
       { temperature: 0.65 },
+      req.user?.id,
+      req.originalUrl || "/api/application-message"
     );
     const generated = JSON.parse(completion.text).message;
     if (typeof generated !== 'string' || generated.trim().length < 50) {
@@ -540,6 +576,8 @@ Existing notes: ${currentAbout || 'None'}
 
 Use the supplied details to create natural, specific prose with varied sentence structure. Use only the supplied facts; do not invent employers, qualifications, awards, clients, or years of experience. Keep it warm and professional in 90 to 150 words. Return only JSON: {"aboutMe":"..."}`,
       { temperature: 0.7 },
+      req.user?.id,
+      req.originalUrl || "/api/profile-about"
     );
     const generated = JSON.parse(completion.text).aboutMe;
     if (typeof generated !== 'string' || generated.trim().length < 80) {
@@ -568,6 +606,8 @@ Recruiter prompt: ${prompt}
 
 Adapt the structure and wording to this specific role. Include a concise overview, concrete responsibilities, required skills and tools, preferred experience, and expected outcomes only when supported by the prompt. Do not invent salary, company details, benefits, qualifications, or requirements. Avoid phrases such as "we are seeking a skilled professional" and "the successful candidate will" unless the context genuinely calls for them. Write 250 to 450 words. Return only JSON: {"description":"..."}`,
       { temperature: 0.7 },
+      req.user?.id,
+      req.originalUrl || "/api/job-description"
     );
     const generated = JSON.parse(completion.text).description;
     if (typeof generated !== 'string' || generated.trim().length < 200) {

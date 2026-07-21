@@ -105,6 +105,8 @@ router.post(
 );
 
 router.get("/get/applied", auth(), jobController.getAppliedJobs);
+router.get("/saved/mine", auth(), jobController.getSavedJobs);
+router.post("/:jobId/save", auth(), jobController.saveJob);
 
 // Report job
 router.route("/report/:id").post(auth(), jobController.reportJob);

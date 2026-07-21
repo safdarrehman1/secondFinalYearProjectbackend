@@ -109,6 +109,7 @@ const orderSchema = mongoose.Schema(
         "revision",
         "cancel",
         "complete",
+        "disputed",
       ],
       default: "active",
       required: true,
@@ -136,6 +137,23 @@ const orderSchema = mongoose.Schema(
         downloadCount: { type: Number, default: 0 },
       },
     ],
+    milestones: [
+      {
+        title: { type: String, required: true },
+        description: String,
+        dueAt: Date,
+        status: {
+          type: String,
+          enum: ["pending", "in_progress", "submitted", "approved"],
+          default: "pending",
+        },
+        deliverables: [{ label: String, url: String }],
+        completedAt: Date,
+      },
+    ],
+    revisionLimit: { type: Number, min: 0, default: 2 },
+    revisionsUsed: { type: Number, min: 0, default: 0 },
+    autoCompleteAt: Date,
     downloadUrls: [
       {
         url: String,
@@ -168,6 +186,27 @@ const orderSchema = mongoose.Schema(
     },
     buyerReviewAt: {
       type: Date,
+    },
+    buyerReviewEditedAt: Date,
+    reviewCategories: {
+      quality: { type: Number, min: 1, max: 5 },
+      communication: { type: Number, min: 1, max: 5 },
+      timeliness: { type: Number, min: 1, max: 5 },
+      professionalism: { type: Number, min: 1, max: 5 },
+    },
+    reviewModeration: {
+      status: {
+        type: String,
+        enum: ["visible", "reported", "hidden"],
+        default: "visible",
+      },
+      reports: [
+        {
+          reportedBy: { type: ObjectId, ref: "User", required: true },
+          reason: { type: String, required: true, maxlength: 500 },
+          createdAt: { type: Date, default: Date.now },
+        },
+      ],
     },
     sellerReply: {
       type: String,
@@ -297,6 +336,9 @@ const orderSchema = mongoose.Schema(
 // add plugin that converts mongoose to json
 orderSchema.plugin(toJSON);
 orderSchema.plugin(paginate);
+orderSchema.index({ recruiterId: 1, status: 1, createdAt: -1 });
+orderSchema.index({ createdBy: 1, status: 1, createdAt: -1 });
+orderSchema.index({ autoCompleteAt: 1, status: 1 });
 
 orderSchema.pre("save", function (next) {
   this._statusModified = this.isModified("status");
