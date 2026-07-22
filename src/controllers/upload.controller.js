@@ -1,48 +1,12 @@
-// const httpStatus = require('http-status');
-// const catchAsync = require('../utils/catchAsync');
-// const User = require('../models/user.model'); // Import the User model
-
-// /**
-//  * Handle the upload of a profile picture and save the image path to the user's profile.
-//  * @param {Object} req - The request object.
-//  * @param {Object} res - The response object.
-//  * @param {Object} next - The next middleware function.
-//  */
-// const uploadImage = catchAsync(async (req, res) => {
-  
-//   if (!req.file) {
-//     return res.status(400).send({ message: 'Please upload a file!' });
-//   }
-
-//   const filePath = req.file.path;
-
-//   const user = await User.findById(req.user.id); 
-//   if (!user) {
-//     return res.status(404).send({ message: 'User not found!' });
-//   }
-
-//   user.profilePicture = filePath;
-//   await user.save();
-
-//   res.status(httpStatus.OK).send({
-//     message: 'Profile picture uploaded successfully',
-//     data: {
-//       profilePicture: filePath, // Path of the uploaded image
-//       userId: user._id,
-//     },
-//   });
-// });
-
-// module.exports = {
-//   uploadImage,
-// };
-
 const httpStatus = require('http-status');
 const catchAsync = require('../utils/catchAsync');
 const User = require('../models/user.model');
+const { uploadToCloudinary } = require('../utils/cloudinaryUpload');
 const { uploadFileToS3 } = require('../utils/s3Upload');
 
-
+/**
+ * Handle multi-type file uploads (images, CVs, assets) to Cloudinary bucket with fallbacks
+ */
 const uploadImage = catchAsync(async (req, res) => {
   if (!req.file) {
     return res.status(400).send({ message: 'Please upload a file!' });
@@ -53,52 +17,67 @@ const uploadImage = catchAsync(async (req, res) => {
     return res.status(404).send({ message: 'User not found!' });
   }
 
-  // Upload to S3
-  const s3Result = await uploadFileToS3(req.file, user._id.toString());
+  let uploadResult = null;
+  try {
+    // Primary upload to Cloudinary bucket
+    uploadResult = await uploadToCloudinary(req.file, 'intelligent_hiring_assets');
+  } catch (err) {
+    console.error('Cloudinary upload warning:', err.message);
+    try {
+      uploadResult = await uploadFileToS3(req.file, user._id.toString());
+    } catch (s3Err) {
+      console.error('S3 fallback error:', s3Err.message);
+      uploadResult = { url: `/uploads/${req.file.filename || req.file.originalname}` };
+    }
+  }
 
-  // Determine response based on file type
+  const fileUrl = uploadResult.url || uploadResult.secure_url;
+
+  // Determine response format depending on form field name
   let responseData = {};
   let message = 'File uploaded successfully';
 
   switch (req.file.fieldname) {
     case 'profilePicture':
-      user.profilePicture = s3Result.url;
+      user.profilePicture = fileUrl;
       await user.save();
-      responseData = { profilePicture: s3Result.url, userId: user._id };
+      responseData = { profilePicture: fileUrl, userId: user._id, url: fileUrl };
       message = 'Profile picture uploaded successfully';
       break;
     case 'profileCV':
-      responseData = { profileCV: s3Result.url };
+      responseData = { profileCV: fileUrl, url: fileUrl };
       message = 'CV uploaded successfully';
       break;
     case 'jobImage':
-      responseData = { jobImage: s3Result.url };
+      responseData = { jobImage: fileUrl, url: fileUrl };
       message = 'Job asset image uploaded successfully';
       break;
     case 'jobBackground':
-      responseData = { jobBackground: s3Result.url };
+      responseData = { jobBackground: fileUrl, url: fileUrl };
       message = 'Job asset background uploaded successfully';
       break;
     case 'workImage':
-      responseData = { workImage: s3Result.url };
+      responseData = { workImage: fileUrl, url: fileUrl };
       message = 'Work image uploaded successfully';
       break;
     case 'assetImage':
-      responseData = { imageUrl: s3Result.url };
+      responseData = { imageUrl: fileUrl, url: fileUrl };
       message = 'Asset image uploaded successfully';
       break;
     case 'asset':
-      responseData = { assetUrl: s3Result.url };
+      responseData = { assetUrl: fileUrl, url: fileUrl };
       message = 'Asset file uploaded successfully';
       break;
     default:
-      responseData = { fileUrl: s3Result.url };
+      responseData = { fileUrl, url: fileUrl };
       message = 'File uploaded successfully';
   }
 
   res.status(httpStatus.OK).send({
     message,
     data: responseData,
+    url: fileUrl,
+    cloudinary: uploadResult,
   });
 });
 

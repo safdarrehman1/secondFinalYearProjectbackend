@@ -197,6 +197,11 @@ module.exports = {
     email: envVars.ADMIN_EMAIL,
     password: envVars.ADMIN_PASSWORD,
   },
+  cloudinary: {
+    cloudName: envVars.CLOUDINARY_CLOUD_NAME || "ljktkqef",
+    apiKey: envVars.CLOUDINARY_API_KEY || "617366888189195",
+    apiSecret: envVars.CLOUDINARY_API_SECRET || "3xn1Q0gVlaiaP_hrqgwinxJlpl0",
+  },
   wise: {
     host: process.env.WISE_API_HOST,
     token: process.env.WISE_TOKEN,
