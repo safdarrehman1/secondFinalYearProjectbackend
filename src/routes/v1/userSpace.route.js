@@ -5,6 +5,7 @@ const userSpaceValidation = require('../../validations/userSpace.validation');
 const userSpaceController = require('../../controllers/userSpace.controller');
 const uploadCoverValidation = require('../../validations/uploadCover.validation');
 const { upload, uploadFileToS3 } = require('../../utils/s3Upload');
+const { uploadToCloudinary } = require('../../utils/cloudinaryUpload');
 
 const router = express.Router();
 
@@ -38,10 +39,20 @@ router.route('/upload-cover').post(
         mimetype,
         fieldname: 'userSpaceCover',
       };
-      const s3Result = await uploadFileToS3(file, userId);
+
+      let uploadResult = null;
+      try {
+        uploadResult = await uploadToCloudinary(file, 'user-space-covers');
+      } catch (cloudErr) {
+        console.error('Cloudinary cover upload warning, trying S3:', cloudErr.message);
+        uploadResult = await uploadFileToS3(file, userId);
+      }
+
+      const coverUrl = uploadResult.url || uploadResult.secure_url;
+
       // Update DB userSpace
-      await require('../../services/userSpace.service').updateSpace(userId, { coverUrl: s3Result.url, coverCrop: profileBgPosY });
-      return res.status(200).json({ coverUrl: s3Result.url });
+      await require('../../services/userSpace.service').updateSpace(userId, { coverUrl, coverCrop: profileBgPosY });
+      return res.status(200).json({ coverUrl });
     } catch (err) {
       next(err);
     }
