@@ -31,12 +31,14 @@ const fulltimeApplicationRoute = require('./application.route');
 const auditRoute = require('./audit.route');
 const analyticsRoute = require('./analytics.route');
 const logRoute = require('./log.route');
+const hiringAssetRoute = require('./hiringAsset.route');
 
 const router = express.Router();
 
 const defaultRoutes = [
   { path: '/auth', route: authRoute },
   { path: '/logs', route: logRoute },
+  { path: '/hiring-asset', route: hiringAssetRoute },
   { path: '/users', route: userRoute },
   { path: '/user-space', route: userSpaceRoute },
   { path: '/job', route: jobsRoute },

@@ -233,7 +233,7 @@ const getMyFollowing = async (req, res) => {
           uSpace?.creationOccupation?.length > 0
             ? uSpace.creationOccupation
             : [uSpace?.businessOccupation || "Developer"];
-        const locationAddr = uSpace?.address || uSpace?.city || uSpace?.location || "San Francisco, CA";
+        const locationAddr = uSpace?.address || uSpace?.city || uSpace?.location || "";
 
         return {
           id: u._id.toString(),
@@ -241,8 +241,8 @@ const getMyFollowing = async (req, res) => {
           userName: displayName,
           name: displayName,
           email: u.email,
-          avatar: uSpace?.profilePicture || u.profilePicture || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=500&q=80",
-          profilePicture: uSpace?.profilePicture || u.profilePicture || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=500&q=80",
+          avatar: uSpace?.profilePicture || u.profilePicture || "",
+          profilePicture: uSpace?.profilePicture || u.profilePicture || "",
           myRole: rolesList,
           address: locationAddr,
         };
@@ -272,7 +272,7 @@ const getMyFollowers = async (req, res) => {
           uSpace?.creationOccupation?.length > 0
             ? uSpace.creationOccupation
             : [uSpace?.businessOccupation || "Developer"];
-        const locationAddr = uSpace?.address || uSpace?.city || uSpace?.location || "San Francisco, CA";
+        const locationAddr = uSpace?.address || uSpace?.city || uSpace?.location || "";
 
         return {
           id: u._id.toString(),
@@ -280,8 +280,8 @@ const getMyFollowers = async (req, res) => {
           userName: displayName,
           name: displayName,
           email: u.email,
-          avatar: uSpace?.profilePicture || u.profilePicture || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=500&q=80",
-          profilePicture: uSpace?.profilePicture || u.profilePicture || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=500&q=80",
+          avatar: uSpace?.profilePicture || u.profilePicture || "",
+          profilePicture: uSpace?.profilePicture || u.profilePicture || "",
           myRole: rolesList,
           address: locationAddr,
         };

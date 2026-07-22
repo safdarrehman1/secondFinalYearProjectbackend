@@ -49,7 +49,7 @@ const saleSchema = new mongoose.Schema(
     },
     paymentMethod: {
       type: String,
-      enum: ["paypal", "stripe", "card"],
+      enum: ["paypal", "stripe", "card", "simulated_fake_payment", "wallet", "free"],
       default: "paypal",
     },
     paymentId: {

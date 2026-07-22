@@ -69,6 +69,19 @@ const userSchema = mongoose.Schema(
       type: [mongoose.Schema.Types.Mixed],
       default: [],
     },
+    assetCart: [
+      {
+        assetId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "HiringAsset",
+          required: true,
+        },
+        paid: {
+          type: Boolean,
+          default: false,
+        },
+      },
+    ],
     noPassword: {
       type: Boolean,
       default: false,

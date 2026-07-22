@@ -32,7 +32,7 @@ const purchaseSchema = mongoose.Schema(
     },
     paymentMethod: {
       type: String,
-      enum: ["wallet", "square", "stripe", "free", "paypal"],
+      enum: ["wallet", "square", "stripe", "free", "paypal", "card", "simulated_fake_payment"],
       required: true,
     },
     squarePaymentId: {

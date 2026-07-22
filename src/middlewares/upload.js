@@ -97,6 +97,8 @@ const allowedMimes = [
   'image/jpeg',
   'image/png',
   'image/jpg',
+  'image/webp',
+  'image/gif',
   'audio/mpeg',
   'audio/mp3',
   'audio/wav',
