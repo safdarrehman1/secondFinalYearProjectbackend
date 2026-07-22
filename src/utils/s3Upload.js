@@ -55,7 +55,7 @@ async function uploadFileToS3(file, userId = "anonymous") {
     const localPath = path.join(__dirname, "../../public", ...key.split("/"));
     await fs.mkdir(path.dirname(localPath), { recursive: true });
     await fs.writeFile(localPath, file.buffer);
-    const baseUrl = process.env.BACKEND_URL || process.env.BASE_URL || `http://localhost:${process.env.PORT || 3000}`;
+    const baseUrl = process.env.BACKEND_URL || process.env.BASE_URL || "https://secondfinalyearprojectbackend-1.onrender.com";
 
     return {
       url: `${baseUrl.replace(/\/$/, "")}/${key}`,
