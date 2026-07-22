@@ -30,6 +30,10 @@ const notificationSchema = mongoose.Schema(
         "review_reply",
         "support_requested",
         "job_application",
+        "application_status",
+        "test_status",
+        "interview_update",
+        "message_received",
       ],
     },
     receiver: {
@@ -54,6 +58,7 @@ const notificationSchema = mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    dedupeKey: { type: String, sparse: true, unique: true, index: true },
   },
   {
     timestamps: true,

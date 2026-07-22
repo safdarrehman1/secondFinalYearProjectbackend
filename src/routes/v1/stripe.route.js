@@ -30,7 +30,7 @@ router.post('/payment-intent/:paymentIntentId/confirm', stripeController.confirm
 
 
 // Refunds
-router.post('/payment-intent/:paymentIntentId/refund', stripeController.createRefund);
+router.post('/payment-intent/:paymentIntentId/refund', auth('admin'), stripeController.createRefund);
 
 // Balance
 router.get('/balance', stripeController.getStripeBalance);

@@ -10,14 +10,19 @@ const session = require("express-session");
 const config = require("./config/config");
 const morgan = require("./config/morgan");
 const { jwtStrategy } = require("./config/passport");
-const { authLimiter } = require("./middlewares/rateLimiter");
+const { authLimiter, apiLimiter } = require("./middlewares/rateLimiter");
 const routes = require("./routes/v1");
+const filtrationRoutes = require("./modules/job-filtration/filtration.route");
 const { errorConverter, errorHandler } = require("./middlewares/error");
 const ApiError = require("./utils/ApiError");
 const AttachmentCleanupService = require("./services/attachmentCleanup.service");
+const { corsOptions } = require("./config/cors");
+const requestContext = require("./middlewares/requestContext");
 
 const app = express();
 global.__basedir = __dirname;
+app.set("trust proxy", 1);
+app.use(requestContext);
 app.use(express.static("public"));
 
 if (config.env !== "test") {
@@ -29,19 +34,21 @@ if (config.env !== "test") {
 app.use(helmet());
 
 // parse json request body
-app.use(express.json({ limit: "50mb" }));
+app.use(express.json({ limit: config.bodyLimit }));
 
 // parse urlencoded request body
-app.use(express.urlencoded({ extended: true, limit: "50mb" }));
+app.use(express.urlencoded({ extended: true, limit: config.bodyLimit }));
 
 // session middleware for OAuth state management
 app.use(
   session({
-    secret: config.jwt.secret || "your-session-secret",
+    secret: config.sessionSecret,
     resave: false,
     saveUninitialized: false,
     cookie: {
-      secure: false, // set to true if using HTTPS
+      httpOnly: true,
+      secure: config.env === "production",
+      sameSite: "lax",
       maxAge: 300000, // 5 minutes
     },
   }),
@@ -55,14 +62,8 @@ app.use(mongoSanitize());
 app.use(compression());
 
 // enable cors
-app.use(
-  cors({
-    origin: "*",
-    methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
-  }),
-);
-
-app.options("*", cors());
+app.use(cors(corsOptions));
+app.options("*", cors(corsOptions));
 
 // jwt authentication
 app.use(passport.initialize());
@@ -73,12 +74,14 @@ if (config.env === "production") {
   app.use("/v1/auth", authLimiter);
 }
 
-app.use((req, res, next) => {
-  console.log(`${req.method} ${req.originalUrl}`);
-  next();
+app.get("/health", (req, res) => res.status(200).json({ status: "ok" }));
+app.get("/ready", (req, res) => {
+  const ready = require("mongoose").connection.readyState === 1;
+  res.status(ready ? 200 : 503).json({ status: ready ? "ready" : "not_ready" });
 });
 // v1 api routes
-app.use("/v1", routes);
+app.use("/v1", apiLimiter, routes);
+app.use("/api", apiLimiter, filtrationRoutes);
 
 app.get("/", (req, res) => {
   res.send("Welcome! Backend Tech Hiring App Running Normally. v4");

@@ -44,6 +44,11 @@ const userSchema = mongoose.Schema(
         ref: "User",
       },
     ],
+    notificationPreferences: {
+      applications: { type: Boolean, default: true }, tests: { type: Boolean, default: true },
+      interviews: { type: Boolean, default: true }, messages: { type: Boolean, default: true },
+      orders: { type: Boolean, default: true }, reviews: { type: Boolean, default: true }, email: { type: Boolean, default: true },
+    },
     role: {
       type: String,
       enum: roles,
@@ -53,6 +58,9 @@ const userSchema = mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    failedLoginAttempts: { type: Number, default: 0, private: true },
+    loginLockedUntil: { type: Date, private: true },
+    lastLoginAt: Date,
     profilePicture: {
       type: String,
       default: "",
@@ -61,6 +69,19 @@ const userSchema = mongoose.Schema(
       type: [mongoose.Schema.Types.Mixed],
       default: [],
     },
+    assetCart: [
+      {
+        assetId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "HiringAsset",
+          required: true,
+        },
+        paid: {
+          type: Boolean,
+          default: false,
+        },
+      },
+    ],
     noPassword: {
       type: Boolean,
       default: false,

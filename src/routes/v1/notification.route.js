@@ -7,6 +7,7 @@ const router = express.Router();
 router.route("/").get(auth(), notificationController.getNotifications);
 
 router.route("/read-all").patch(auth(), notificationController.markAllAsRead);
+router.route("/preferences").get(auth(), notificationController.getPreferences).patch(auth(), notificationController.updatePreferences);
 
 router
   .route("/:notificationId/read")

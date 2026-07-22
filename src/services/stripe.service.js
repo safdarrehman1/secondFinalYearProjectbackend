@@ -6,50 +6,16 @@ const { User } = require('../models');
 // Initialize Stripe with secret key
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const logger = require('../config/logger');
-const fs = require('fs');
-const path = require('path');
-
-// Create logs directory if it doesn't exist
-const logsDir = path.join(__dirname, '../../logs');
-if (!fs.existsSync(logsDir)) {
-  fs.mkdirSync(logsDir, { recursive: true });
-}
 
 // Stripe logging helper
 const logStripeRequest = (operation, request, response, error = null) => {
-  const timestamp = new Date().toISOString();
-  const logData = {
-    timestamp,
+  const metadata = {
     operation,
-    request: JSON.stringify(request, null, 2),
-    response: response ? JSON.stringify(response, null, 2) : null,
-    error: error ? error.message : null,
-    stack: error ? error.stack : null
+    resourceId: response?.id || request?.paymentIntentId || null,
+    status: response?.status || null,
   };
-  
-  const logString = `
-=== STRIPE ${operation.toUpperCase()} LOG ===
-Timestamp: ${timestamp}
-Operation: ${operation}
-
-REQUEST:
-${logData.request}
-
-RESPONSE:
-${logData.response || 'No response'}
-
-ERROR:
-${logData.error || 'No error'}
-
-${logData.stack || ''}
-==============================================
-
-`;
-
-  const logFile = path.join(logsDir, `stripe-${new Date().toISOString().split('T')[0]}.log`);
-  fs.appendFileSync(logFile, logString);
-  
-  logger.info(`Stripe ${operation} logged to file`);
+  if (error) logger.error(`Stripe ${operation} failed: ${error.message}`, metadata);
+  else logger.info(`Stripe ${operation} completed`, metadata);
 };
 
 /**

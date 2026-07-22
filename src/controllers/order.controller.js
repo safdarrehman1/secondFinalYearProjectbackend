@@ -4,7 +4,7 @@ const regexFilter = require("../utils/regexFilter");
 const ApiError = require("../utils/ApiError");
 const catchAsync = require("../utils/catchAsync");
 const { orderService } = require("../services");
-const { Order } = require("../models");
+const { Order, Job } = require("../models");
 const ChatService = require("../services/chat.service");
 const { uploadFileToS3 } = require("../utils/s3Upload");
 const stripeService = require("../services/stripe.service");
@@ -14,6 +14,7 @@ const {
 } = require("../utils/feeCalculator");
 const { paypalService } = require("../services/paypal.service");
 const { notificationService } = require("../services");
+const auditService = require("../services/audit.service");
 
 // const httpStatus = require('http-status');
 // const ApiError = require('../utils/ApiError');
@@ -177,14 +178,27 @@ const acceptOrder = async (req, res) => {
     const orderId = req.params.orderId;
     const userId = req.user._id;
 
-    // Update order status to inprogress
+    // The order request is already in progress while awaiting a response.
+    // Persist a distinct accepted state so history and action eligibility agree.
     const updatedOrder = await orderService.updateOrderStatus(
       orderId,
-      "inprogress",
+      "accepted",
       "Order accepted",
       userId,
       "accepted",
     );
+
+    if (updatedOrder.jobId) {
+      await Job.findByIdAndUpdate(updatedOrder.jobId, {
+        $set: {
+          status: "inactive",
+          "orderTracking.orderId": updatedOrder._id,
+          "orderTracking.assignedTo": updatedOrder.createdBy,
+          "orderTracking.status": "in_progress",
+          "orderTracking.startedAt": new Date(),
+        },
+      });
+    }
 
     // Send "Order Accepted" card message to chat
     const cardData = {
@@ -194,7 +208,7 @@ const acceptOrder = async (req, res) => {
       description: updatedOrder.description,
       price: updatedOrder.price,
       delivery_time: updatedOrder.delivery_time,
-      status: "inprogress",
+      status: "accepted",
       acceptedBy: userId.toString(),
       acceptedAt: new Date(),
     };
@@ -492,6 +506,7 @@ const addReviewAndRating = async (req, res) => {
       sellerRating,
       buyerReview,
       sellerReview,
+      reviewCategories,
     } = req.body;
 
     // Validate legacy single rating system
@@ -544,6 +559,21 @@ const addReviewAndRating = async (req, res) => {
       );
     }
 
+    if (reviewCategories) {
+      const categoryValues = Object.values(reviewCategories);
+      if (
+        categoryValues.length !== 4 ||
+        categoryValues.some(
+          (value) => typeof value !== "number" || value < 1 || value > 5,
+        )
+      ) {
+        throw new ApiError(
+          httpStatus.BAD_REQUEST,
+          "All four review categories must be rated from 1 to 5",
+        );
+      }
+    }
+
     // Call the service to add review and rating
     const updatedOrder = await orderService.addReviewAndRating(orderId, {
       rating,
@@ -554,6 +584,7 @@ const addReviewAndRating = async (req, res) => {
       sellerRating,
       buyerReview,
       sellerReview,
+      reviewCategories,
     });
 
     res.status(httpStatus.OK).send(updatedOrder);
@@ -1173,13 +1204,15 @@ const submitDelivery = async (req, res) => {
         .send({ message: "Order not found" });
     const uid = userId.toString();
     const createdByStr = order.createdBy ? order.createdBy.toString() : null;
-    const recruiterStr = order.recruiterId
-      ? order.recruiterId.toString()
-      : null;
-    if (uid !== createdByStr && uid !== recruiterStr) {
+    if (uid !== createdByStr) {
       return res
         .status(httpStatus.FORBIDDEN)
-        .send({ message: "Not allowed to submit delivery for this order" });
+        .send({ message: "Only the seller can submit a delivery" });
+    }
+    if (!["accepted", "revision"].includes(order.status)) {
+      return res.status(httpStatus.CONFLICT).send({
+        message: "A delivery can only be submitted for an active order",
+      });
     }
 
     // Handle file uploads to S3
@@ -1230,6 +1263,7 @@ const submitDelivery = async (req, res) => {
 
     // Update status
     order.status = "delivered";
+    order.autoCompleteAt = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
     await order.save();
 
     // Send notification
@@ -1255,8 +1289,6 @@ const submitDelivery = async (req, res) => {
 
 // Accept a submitted delivery (sets status to 'complete')
 // Accept a submitted delivery (sets status to 'complete')
-const ratingService = require("../services/rating.service");
-
 const acceptDelivery = async (req, res) => {
   try {
     const { orderId } = req.params;
@@ -1272,37 +1304,15 @@ const acceptDelivery = async (req, res) => {
     const recruiterStr = order.recruiterId
       ? order.recruiterId.toString()
       : null;
-    if (uid !== createdByStr && uid !== recruiterStr) {
+    if (uid !== recruiterStr) {
       return res
         .status(httpStatus.FORBIDDEN)
-        .send({ message: "Not allowed to accept this delivery" });
+        .send({ message: "Only the buyer can accept this delivery" });
     }
-
-    // Update seller balance when buyer accepts delivery
-    const { User } = require("../models");
-    const orderAmount = parseFloat(order.price);
-
-    // Find seller by ID (the one who created the order)
-    const sellerId = order.createdBy;
-    const seller = await User.findById(sellerId);
-
-    if (seller) {
-      // Calculate seller payout: Order amount - 10% platform fee - 1.32% VAT (Stripe fees now charged on withdrawal)
-      const platformFee = orderAmount * 0.1; // 10% platform fee
-      const vatAmount = orderAmount * 0.0132; // 1.32% VAT
-      const sellerPayout = orderAmount - platformFee - vatAmount;
-
-      await User.findByIdAndUpdate(sellerId, {
-        $inc: { balance: sellerPayout },
+    if (order.status !== "delivered") {
+      return res.status(httpStatus.CONFLICT).send({
+        message: "Only a submitted delivery can be accepted",
       });
-
-      console.log(
-        `✅ DELIVERY ACCEPTED: Added $${sellerPayout.toFixed(2)} to seller ${
-          seller.email
-        } (Order: $${orderAmount}, Platform Fee: $${platformFee.toFixed(
-          2,
-        )}, VAT: $${vatAmount.toFixed(2)})`,
-      );
     }
 
     // Mark refund as ineligible after successful delivery
@@ -1310,6 +1320,7 @@ const acceptDelivery = async (req, res) => {
       $set: {
         refundEligible: false,
         completedAt: new Date(),
+        autoCompleteAt: null,
       },
     });
 
@@ -1323,14 +1334,6 @@ const acceptDelivery = async (req, res) => {
     );
 
     console.log("Updated Order:", updatedOrder);
-
-    // Explicitly update user metrics for both parties
-    if (order.createdBy) {
-      await ratingService.updateUserMetrics(order.createdBy);
-    }
-    if (order.recruiterId) {
-      await ratingService.updateUserMetrics(order.recruiterId);
-    }
 
     // Per requirement, do not push activity to chat messages for delivery accepted
     return res.status(httpStatus.OK).send(updatedOrder);
@@ -1744,10 +1747,20 @@ const requestDeliveryRevision = async (req, res) => {
     const recruiterStr = order.recruiterId
       ? order.recruiterId.toString()
       : null;
-    if (uid !== createdByStr && uid !== recruiterStr) {
+    if (uid !== recruiterStr) {
       return res
         .status(httpStatus.FORBIDDEN)
-        .send({ message: "Not allowed to request revision for this order" });
+        .send({ message: "Only the buyer can request a revision" });
+    }
+    if (order.status !== "delivered") {
+      return res.status(httpStatus.CONFLICT).send({
+        message: "Revisions can only be requested after delivery",
+      });
+    }
+    if ((order.revisionsUsed || 0) >= (order.revisionLimit || 0)) {
+      return res.status(httpStatus.CONFLICT).send({
+        message: "The revision limit has been reached",
+      });
     }
 
     // Handle optional files: upload all to S3 (all file types accepted by uploader)
@@ -1797,6 +1810,8 @@ const requestDeliveryRevision = async (req, res) => {
 
     // Set status to revision
     order.status = "revision";
+    order.revisionsUsed = (order.revisionsUsed || 0) + 1;
+    order.autoCompleteAt = undefined;
     await order.save();
 
     // Send notification
@@ -1941,6 +1956,11 @@ const requestSupport = async (req, res) => {
       status: "pending",
     };
 
+    if (["delivered", "revision"].includes(order.status)) {
+      order.status = "disputed";
+      order.autoCompleteAt = undefined;
+    }
+
     const requesterName =
       req.user.name ||
       `${req.user.firstName || ""} ${req.user.lastName || ""}`.trim() ||
@@ -2008,6 +2028,170 @@ const adminResolveSupport = async (req, res) => {
   }
 };
 
+const manageMilestone = async (req, res) => {
+  try {
+    const order = await Order.findById(req.params.orderId);
+    if (!order) {
+      return res.status(404).send({ success: false, message: "Order not found" });
+    }
+
+    const actorId = String(req.user.id || req.user._id);
+    const participants = [String(order.createdBy), String(order.recruiterId)];
+    if (!participants.includes(actorId)) {
+      return res.status(403).send({ success: false, message: "Forbidden" });
+    }
+    if (["complete", "cancel"].includes(order.status)) {
+      return res.status(409).send({
+        success: false,
+        message: "Completed or cancelled orders cannot be changed",
+      });
+    }
+
+    order.activities = order.activities || [];
+    if (req.method === "POST") {
+      const title = String(req.body.title || "").trim();
+      if (title.length < 3 || title.length > 120) {
+        return res.status(400).send({
+          success: false,
+          message: "Milestone title must be between 3 and 120 characters",
+        });
+      }
+      order.milestones.push({
+        title,
+        description: req.body.description,
+        dueAt: req.body.dueAt,
+      });
+      order.activities.push({
+        action: "milestone_created",
+        by: actorId,
+        note: title,
+      });
+    } else {
+      const milestone = order.milestones.id(req.params.milestoneId);
+      if (!milestone) {
+        return res.status(404).send({
+          success: false,
+          message: "Milestone not found",
+        });
+      }
+
+      const allowed = {
+        pending: ["in_progress"],
+        in_progress: ["submitted"],
+        submitted: ["approved", "in_progress"],
+        approved: [],
+      };
+      const nextStatus = req.body.status;
+      if (!(allowed[milestone.status] || []).includes(nextStatus)) {
+        return res.status(409).send({
+          success: false,
+          message: `Milestone cannot move from ${milestone.status} to ${nextStatus}`,
+        });
+      }
+
+      milestone.status = nextStatus;
+      if (Array.isArray(req.body.deliverables)) {
+        milestone.deliverables = req.body.deliverables;
+      }
+      if (nextStatus === "approved") milestone.completedAt = new Date();
+      order.activities.push({
+        action: "milestone_status_changed",
+        by: actorId,
+        note: milestone.title,
+        meta: { status: nextStatus },
+      });
+    }
+
+    await order.save();
+    return res.send({ success: true, data: order.milestones });
+  } catch (error) {
+    return res.status(400).send({ success: false, message: error.message });
+  }
+};
+
+const editReview = async (req, res) => {
+  try {
+    const { rating, review, reviewCategories } = req.body;
+    if (typeof rating !== "number" || rating < 1 || rating > 5) {
+      throw new ApiError(httpStatus.BAD_REQUEST, "Rating must be between 1 and 5");
+    }
+    if (!review || review.trim().length < 10 || review.length > 200) {
+      throw new ApiError(
+        httpStatus.BAD_REQUEST,
+        "Review must be between 10 and 200 characters",
+      );
+    }
+    const updatedOrder = await orderService.editReview(
+      req.params.orderId,
+      req.user._id,
+      { rating, review: review.trim(), reviewCategories },
+    );
+    return res.status(httpStatus.OK).send(updatedOrder);
+  } catch (error) {
+    return res
+      .status(error.statusCode || httpStatus.BAD_REQUEST)
+      .send({ message: error.message });
+  }
+};
+
+const reportReview = async (req, res) => {
+  try {
+    const reason = String(req.body.reason || "").trim();
+    if (reason.length < 10 || reason.length > 500) {
+      throw new ApiError(
+        httpStatus.BAD_REQUEST,
+        "Report reason must be between 10 and 500 characters",
+      );
+    }
+    const moderation = await orderService.reportReview(
+      req.params.orderId,
+      req.user._id,
+      reason,
+    );
+    await auditService.record({
+      actor: req.user._id,
+      action: "review.reported",
+      resourceType: "order_review",
+      resourceId: req.params.orderId,
+      metadata: { reason },
+      request: req,
+    });
+    return res.status(httpStatus.OK).send({ success: true, data: moderation });
+  } catch (error) {
+    return res
+      .status(error.statusCode || httpStatus.BAD_REQUEST)
+      .send({ message: error.message });
+  }
+};
+
+const moderateReview = async (req, res) => {
+  try {
+    const { status } = req.body;
+    if (!["visible", "hidden"].includes(status)) {
+      throw new ApiError(
+        httpStatus.BAD_REQUEST,
+        "Review status must be visible or hidden",
+      );
+    }
+    const moderation = await orderService.moderateReview(
+      req.params.orderId,
+      status,
+    );
+    await auditService.record({
+      actor: req.user._id,
+      action: `review.${status}`,
+      resourceType: "order_review",
+      resourceId: req.params.orderId,
+      request: req,
+    });
+    return res.status(httpStatus.OK).send({ success: true, data: moderation });
+  } catch (error) {
+    return res
+      .status(error.statusCode || httpStatus.BAD_REQUEST)
+      .send({ message: error.message });
+  }
+};
+
 module.exports = {
   createOrder,
   getOrder,
@@ -2016,6 +2200,9 @@ module.exports = {
   declineOrder,
   processOrderPayment,
   addReviewAndRating,
+  editReview,
+  reportReview,
+  moderateReview,
   replyToBuyerReview,
   getMyOrders,
   getCompletedOrders,
@@ -2043,4 +2230,5 @@ module.exports = {
   decideExtraPayment,
   payExtraPayment,
   createExtraPaymentPaypalOrder,
+  manageMilestone,
 };

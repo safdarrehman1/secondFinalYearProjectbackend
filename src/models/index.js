@@ -16,4 +16,6 @@ module.exports.DailyLimits = require('./dailyLimits.model');
 module.exports.SkillGapCreation = require('./skillGapCreation.model');
 module.exports.Application = require('./application.model');
 module.exports.Resume = require('./resume.model');
+module.exports.AiLog = require('./aiLog.model');
+module.exports.EmailLog = require('./emailLog.model');
 

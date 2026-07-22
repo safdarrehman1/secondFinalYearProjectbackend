@@ -28,11 +28,17 @@ const screeningController = require('../../modules/applicant-screening/screening
 const auth = require('../../middlewares/auth');
 const skillGapCreationRoute = require('./skillGapCreation.route');
 const fulltimeApplicationRoute = require('./application.route');
+const auditRoute = require('./audit.route');
+const analyticsRoute = require('./analytics.route');
+const logRoute = require('./log.route');
+const hiringAssetRoute = require('./hiringAsset.route');
 
 const router = express.Router();
 
 const defaultRoutes = [
   { path: '/auth', route: authRoute },
+  { path: '/logs', route: logRoute },
+  { path: '/hiring-asset', route: hiringAssetRoute },
   { path: '/users', route: userRoute },
   { path: '/user-space', route: userSpaceRoute },
   { path: '/job', route: jobsRoute },
@@ -56,8 +62,10 @@ const defaultRoutes = [
   { path: '/clear-database', route: clearDatabaseRoute },
   { path: '/order', route: orderRoutes },
   { path: '/reports', route: reportRoute },
-  { path: '/paypal', route: paypalRoutes },
+  ...(config.env === 'development' ? [{ path: '/paypal', route: paypalRoutes }] : []),
   { path: '/resumes', route: resumeRoute },
+  { path: '/audit-logs', route: auditRoute },
+  { path: '/analytics', route: analyticsRoute },
 ];
 
 defaultRoutes.forEach((r) => router.use(r.path, r.route));

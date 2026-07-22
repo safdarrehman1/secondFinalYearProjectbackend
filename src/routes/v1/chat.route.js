@@ -5,11 +5,12 @@ const auth = require("../../middlewares/auth");
 const { uploadChatAttachment } = require("../../middlewares/upload");
 
 // Fetch chat history between two users
-router.get("/history/:userId", chatController.getChatHistory);
+router.get("/history/:userId", auth("user", "recruiter"), chatController.getChatHistory);
 
 router.get("/users/:role", auth("user", "recruiter"), chatController.getUsers);
 
-router.post("/:recipientId/messages", chatController.sendMessage);
+router.post("/:recipientId/messages", auth("user", "recruiter"), chatController.sendMessage);
+router.get("/:chatId/search", auth("user", "recruiter"), chatController.searchMessages);
 
 // Upload chat attachment
 router.post(

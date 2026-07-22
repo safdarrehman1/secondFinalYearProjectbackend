@@ -26,7 +26,7 @@ const generateQuestionnaire = catchAsync(async (req, res) => {
   if (!questionnaire || questionnaire.questions.length !== 8) {
     try {
       const job = await Job.findById(application.jobId).lean();
-      questionnaire = await screeningService.generateQuestionnaire(application, job);
+      questionnaire = await screeningService.generateQuestionnaire(application, job, req.user.id);
       application.screeningStatus = 'test_pending';
       await application.save();
     } catch (error) {

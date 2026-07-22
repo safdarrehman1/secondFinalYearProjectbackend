@@ -33,6 +33,9 @@ const ChatSchema = new mongoose.Schema({
       isCard: { type: Boolean, default: false },
       createdAt: { type: Date, default: Date.now },
       readby: { type: Boolean, default: false },
+      clientMessageId: { type: String, trim: true },
+      deliveredAt: { type: Date, default: Date.now },
+      readAt: Date,
       cardData: {
         type: mongoose.Schema.Types.Mixed, // Use Mixed type for flexible card data
         default: null,
@@ -71,7 +74,9 @@ const ChatSchema = new mongoose.Schema({
       },
     },
   ],
-});
+}, { timestamps: true });
+ChatSchema.index({ participants: 1, type: 1, jobId: 1 });
+ChatSchema.index({ "messages.clientMessageId": 1 });
 
 // Ensure uniqueness of participants set (ignoring order)
 // ChatSchema.index({ participants: 1 }, { unique: true });

@@ -7,10 +7,10 @@ const ApiError = require("../utils/ApiError");
 const errorConverter = (err, req, res, next) => {
   let error = err;
   if (!(error instanceof ApiError)) {
-    const statusCode =
-      error.statusCode || error instanceof mongoose.Error
+    const statusCode = error.statusCode
+      || (error instanceof mongoose.Error
         ? httpStatus.BAD_REQUEST
-        : httpStatus.INTERNAL_SERVER_ERROR;
+        : httpStatus.INTERNAL_SERVER_ERROR);
     const message = error.message || httpStatus[statusCode];
     error = new ApiError(statusCode, message, false, err.stack);
   }
@@ -30,13 +30,12 @@ const errorHandler = (err, req, res, next) => {
   const response = {
     code: statusCode,
     message,
+    requestId: req.id,
     ...(err.wiseErrors && { wiseErrors: err.wiseErrors }),
     ...(config.env === "development" && { stack: err.stack }),
   };
 
-  if (config.env === "development") {
-    logger.error(err);
-  }
+  logger.error(`[${req.id || "no-request-id"}] ${req.method} ${req.path} ${statusCode}: ${err.stack || message}`);
 
   res.status(statusCode).send(response);
 };

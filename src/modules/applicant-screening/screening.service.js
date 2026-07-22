@@ -4,20 +4,47 @@ const config = require('../../config/config');
 const Questionnaire = require('./questionnaire.model');
 const QuestionnaireResponse = require('./questionnaire-response.model');
 
-const aiJson = async (systemInstruction, prompt, maxOutputTokens = 1800, temperature = 0.2, model = config.gemini.model) => {
+const aiJson = async (systemInstruction, prompt, maxOutputTokens = 1800, temperature = 0.2, model = config.gemini.model, userId = null, endpoint = "unknown") => {
   if (!config.gemini.apiKey) throw new Error('Gemini API key is not configured');
-  const response = await axios.post(
-    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
-    {
-      systemInstruction: { parts: [{ text: systemInstruction }] },
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      generationConfig: { temperature, maxOutputTokens, responseMimeType: 'application/json' },
-    },
-    { headers: { 'x-goog-api-key': config.gemini.apiKey }, timeout: 15000 },
-  );
-  const text = response.data?.candidates?.[0]?.content?.parts?.map((part) => part.text || '').join('');
-  if (!text) throw new Error('AI returned no content');
-  return JSON.parse(text);
+  const { logAiRequest } = require('../../services/aiLogger.service');
+  const startTime = Date.now();
+  try {
+    const response = await axios.post(
+      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
+      {
+        systemInstruction: { parts: [{ text: systemInstruction }] },
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: { temperature, maxOutputTokens, responseMimeType: 'application/json' },
+      },
+      { headers: { 'x-goog-api-key': config.gemini.apiKey }, timeout: 15000 },
+    );
+    const text = response.data?.candidates?.[0]?.content?.parts?.map((part) => part.text || '').join('');
+    if (!text) throw new Error('AI returned no content');
+    const usage = response.data.usageMetadata || {};
+    const latencyMs = Date.now() - startTime;
+    logAiRequest({
+      userId,
+      endpoint,
+      model,
+      promptTokens: usage.promptTokenCount || 0,
+      completionTokens: usage.candidatesTokenCount || 0,
+      totalTokens: usage.totalTokenCount || 0,
+      latencyMs,
+      status: 'success',
+    });
+    return JSON.parse(text);
+  } catch (error) {
+    const latencyMs = Date.now() - startTime;
+    logAiRequest({
+      userId,
+      endpoint,
+      model,
+      latencyMs,
+      status: 'failed',
+      errorMessage: error.message,
+    });
+    throw error;
+  }
 };
 
 const normalizeProjects = (projects) => (Array.isArray(projects) ? projects : []).slice(0, 20).map((project) => ({
@@ -45,10 +72,15 @@ const verifyProjectLinks = async (projects) => Promise.all(normalizeProjects(pro
   }
 })).then((items) => items.filter(Boolean));
 
-const parseResume = async (resumeText, jobDescription) => {
+const parseResume = async (resumeText, jobDescription, userId = null) => {
   const parsed = await aiJson(
     'Extract resume facts faithfully. Never invent facts. Return JSON only.',
     `Resume:\n${resumeText.slice(0, 18000)}\n\nReturn {"skills":["..."],"about_summary":"...","projects":[{"name":"...","description":"...","link":null}]}`,
+    1800,
+    0.2,
+    config.gemini.model,
+    userId,
+    "/v1/applications/parse-resume-facts"
   );
   const skills = (Array.isArray(parsed.skills) ? parsed.skills : []).map(String).map((v) => v.trim()).filter(Boolean).slice(0, 50);
   const aboutSummary = String(parsed.about_summary || '').slice(0, 3000);
@@ -57,6 +89,10 @@ const parseResume = async (resumeText, jobDescription) => {
     'You are a precise hiring analyst. Identify only concrete technical, professional, tool, framework, or domain skills explicitly required by the job. Never return ordinary words from prose as skills. Return JSON only.',
     `Job description:\n${String(jobDescription || '').slice(0, 8000)}\n\nApplicant skills: ${skills.join(', ')}\nApplicant summary: ${aboutSummary}\nApplicant projects: ${JSON.stringify(projects).slice(0, 7000)}\n\nReturn this exact structure:\n{"match_score":0,"suggested_description":"2-4 sentences explaining the result and next action","missing_skills":[{"skill":"specific missing job skill","why_it_matters":"job-specific reason","how_to_gain_it":"concrete improvement action"}],"relevant_projects_without_links":[{"project_name":"exact project name from resume","skills":["job-relevant skill demonstrated by this project"]}]}\nRules: match_score is 0-100. missing_skills must contain only requirements that are in the JD and absent or unsupported in the resume. relevant_projects_without_links must include only projects that are relevant to this JD, demonstrate a matched skill, and have no link in the resume. Do not include projects that already have a link.`,
     1200,
+    0.2,
+    config.gemini.model,
+    userId,
+    "/v1/applications/parse-resume-fit"
   );
   const matchScore = Math.max(0, Math.min(100, Math.round(Number(match.match_score) || 0)));
   const flaggedProjects = await verifyProjectLinks(projects);
@@ -96,6 +132,8 @@ const generateQuestionnaire = async (application, job) => {
         2600,
         0.65,
         attempt === 0 ? config.gemini.model : 'gemini-3.1-flash-lite',
+        userId,
+        "/v1/applications/generate-screening-test-mcq"
       );
       questions = (Array.isArray(result.questions) ? result.questions : []).slice(0, 8).map((q, index) => ({
         id: `q${index + 1}`, type: 'mcq', prompt: String(q.prompt || '').trim(),

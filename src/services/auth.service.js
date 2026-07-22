@@ -6,6 +6,42 @@ const ApiError = require("../utils/ApiError");
 const { tokenTypes } = require("../config/tokens");
 const moment = require("moment");
 
+const MAX_LOGIN_ATTEMPTS = 5;
+const LOGIN_LOCK_MS = 15 * 60 * 1000;
+
+const verifyPasswordLogin = async (user, password, errorMessage) => {
+  if (user?.loginLockedUntil && user.loginLockedUntil > new Date()) {
+    throw new ApiError(
+      httpStatus.TOO_MANY_REQUESTS,
+      "Too many failed login attempts. Try again later",
+    );
+  }
+
+  if (!user || !(await user.isPasswordMatch(password))) {
+    if (user) {
+      const nextAttempts = (user.failedLoginAttempts || 0) + 1;
+      const update =
+        nextAttempts >= MAX_LOGIN_ATTEMPTS
+          ? {
+              failedLoginAttempts: 0,
+              loginLockedUntil: new Date(Date.now() + LOGIN_LOCK_MS),
+            }
+          : { failedLoginAttempts: nextAttempts };
+      await user.constructor.updateOne({ _id: user._id }, { $set: update });
+    }
+    throw new ApiError(httpStatus.UNAUTHORIZED, errorMessage);
+  }
+
+  await user.constructor.updateOne(
+    { _id: user._id },
+    {
+      $set: { failedLoginAttempts: 0, lastLoginAt: new Date() },
+      $unset: { loginLockedUntil: 1 },
+    },
+  );
+  return user;
+};
+
 /**
  * Login with email/username and password
  * @param {string} email
@@ -14,10 +50,7 @@ const moment = require("moment");
  */
 const loginUserWithEmailAndPassword = async (email, password) => {
   const user = await userService.getUserByEmail(email);
-  if (!user || !(await user.isPasswordMatch(password))) {
-    throw new ApiError(httpStatus.BAD_REQUEST, "Incorrect email or password");
-  }
-  return user;
+  return verifyPasswordLogin(user, password, "Incorrect email or password");
 };
 
 /**
@@ -28,10 +61,7 @@ const loginUserWithEmailAndPassword = async (email, password) => {
  */
 const loginUserWithNameAndPassword = async (name, password) => {
   const user = await userService.getUserByName(name);
-  if (!user || !(await user.isPasswordMatch(password))) {
-    throw new ApiError(httpStatus.BAD_REQUEST, "Incorrect name or password");
-  }
-  return user;
+  return verifyPasswordLogin(user, password, "Incorrect name or password");
 };
 
 /**
@@ -58,14 +88,11 @@ const loginUser = async (emailOrName, password) => {
     }
   }
 
-  if (!user || !(await user.isPasswordMatch(password))) {
-    throw new ApiError(
-      httpStatus.BAD_REQUEST,
-      "Incorrect email/name or password",
-    );
-  }
-
-  return user;
+  return verifyPasswordLogin(
+    user,
+    password,
+    "Incorrect email/name or password",
+  );
 };
 
 /**

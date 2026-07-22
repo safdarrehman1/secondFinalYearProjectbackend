@@ -11,7 +11,6 @@ const createUser = async (userBody) => {
   if (await User.isEmailTaken(userBody.email)) {
     throw new ApiError(httpStatus.UNPROCESSABLE_ENTITY, "Email already taken");
   }
-  console.log("Creating user:", userBody);
   return User.create(userBody);
 };
 

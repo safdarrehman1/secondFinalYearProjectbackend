@@ -87,6 +87,21 @@ router.post(
   auth("user", "recruiter"),
   orderController.addReviewAndRating,
 );
+router.patch(
+  "/:orderId/review",
+  auth("user", "recruiter"),
+  orderController.editReview,
+);
+router.post(
+  "/:orderId/review/report",
+  auth("user", "recruiter"),
+  orderController.reportReview,
+);
+router.patch(
+  "/:orderId/review/moderate",
+  auth("admin"),
+  orderController.moderateReview,
+);
 
 router.post(
   "/:orderId/review-reply",
@@ -177,6 +192,8 @@ router.get(
 );
 
 // Delivery approval flow
+router.post("/:orderId/milestones", auth("user", "recruiter"), orderController.manageMilestone);
+router.patch("/:orderId/milestones/:milestoneId", auth("user", "recruiter"), orderController.manageMilestone);
 router.post(
   "/:orderId/deliver",
   upload.array("deliveryFiles", 10),

@@ -108,6 +108,17 @@ const jobSchema = mongoose.Schema(
       enum: ["proposal", "resume-application"],
       default: "proposal",
     },
+    orderTracking: {
+      orderId: { type: mongoose.Schema.Types.ObjectId, ref: "Order" },
+      assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+      status: {
+        type: String,
+        enum: ["not_started", "in_progress", "completed", "cancelled"],
+        default: "not_started",
+      },
+      startedAt: Date,
+      completedAt: Date,
+    },
     salaryRange: {
       min: { type: Number },
       max: { type: Number },

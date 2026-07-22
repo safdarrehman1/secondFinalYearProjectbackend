@@ -3,6 +3,7 @@ const auth = require('../../middlewares/auth');
 const validate = require('../../middlewares/validate');
 const squareController = require('../../controllers/square.controller');
 const squareValidation = require('../../validations/square.validation');
+const config = require('../../config/config');
 
 const router = express.Router();
 
@@ -33,19 +34,20 @@ router.delete('/disconnect', auth(), squareController.disconnectSquare);
 
 // Payment routes
 router.post('/payment', auth(), squareController.createSimplePayment); // New simple payment endpoint
-router.get('/payment-test', squareController.testSquareConfig); // Test endpoint without auth for debugging
-router.post('/payment-test', squareController.createSimplePayment); // Test payment without auth - FOR DEBUGGING ONLY
 router.post('/payments', auth(), validate(squareValidation.createPayment), squareController.createPayment);
 router.get('/payments/:paymentId', auth(), validate(squareValidation.getPayment), squareController.getPayment);
 router.get('/payments', auth(), validate(squareValidation.listPayments), squareController.listPayments);
 
-// Test endpoint
-router.get('/test-config', squareController.testSquareConfig);
-router.get('/debug-config', squareController.testSquareConfig); // Additional alias for debugging
-router.get('/test-oauth', squareController.testSquareOAuth); // Test OAuth URL generation
-router.get('/test-balance/:userId', squareController.testSquareBalance); // For testing only
-router.get('/debug-users', squareController.debugSquareUsers); // Debug endpoint
-router.get('/logs', squareController.getSquareLogs); // Square activity logs
+if (config.env === 'development') {
+  router.get('/payment-test', squareController.testSquareConfig);
+  router.post('/payment-test', auth(), squareController.createSimplePayment);
+  router.get('/test-config', squareController.testSquareConfig);
+  router.get('/debug-config', squareController.testSquareConfig);
+  router.get('/test-oauth', squareController.testSquareOAuth);
+  router.get('/test-balance/:userId', auth('admin'), squareController.testSquareBalance);
+  router.get('/debug-users', auth('admin'), squareController.debugSquareUsers);
+}
+router.get('/logs', auth('admin'), squareController.getSquareLogs);
 router.get('/raw-data', auth(), squareController.getSquareRawData); // Square raw data for user
 
 module.exports = router;

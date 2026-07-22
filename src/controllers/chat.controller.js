@@ -17,7 +17,8 @@ const s3 = new S3Client({
 
 const getChatHistory = async (req, res) => {
   const { userId } = req.params; // ID of the other user in the chat
-  const { currentUserId, jobId } = req.query; // ID of the current logged-in user
+  const currentUserId = req.user.id;
+  const { jobId } = req.query;
 
   try {
     let chat;
@@ -197,8 +198,8 @@ const getUsers = async (req, res) => {
 };
 const sendMessage = async (req, res) => {
   let { recipientId } = req.params;
-  let { message, attachments, type, jobId } = req.body;
-  let { senderId } = req.query; // Assuming `authenticate` middleware sets req.user
+  let { message, attachments, type, jobId, clientMessageId } = req.body;
+  const senderId = req.user.id;
   try {
     if (!message && (!attachments || attachments.length === 0)) {
       return res
@@ -214,6 +215,7 @@ const sendMessage = async (req, res) => {
       attachments,
       type || "direct",
       jobId || null,
+      clientMessageId || null,
     );
 
     return res.status(201).json(newMessage);
@@ -718,6 +720,7 @@ const getJobChats = async (req, res) => {
     res.status(500).json({ success: false, error: error.message });
   }
 };
+const searchMessages = async (req, res) => { try { const chat = await Chat.findOne({ _id: req.params.chatId, participants: req.user.id }); if (!chat) return res.status(404).json({ success: false, message: "Chat not found" }); const term = String(req.query.q || "").trim().toLowerCase(); if (term.length < 2) return res.status(400).json({ success: false, message: "Search must contain at least 2 characters" }); const results = chat.messages.filter((message) => String(message.text || "").toLowerCase().includes(term)).slice(-100).reverse(); return res.json({ success: true, data: results }); } catch (error) { return res.status(500).json({ success: false, message: "Unable to search messages" }); } };
 
 module.exports = {
   getChatHistory,
@@ -733,4 +736,5 @@ module.exports = {
   getBlockedUsers,
   updateChatState,
   getJobChats,
+  searchMessages,
 };
