@@ -1,4 +1,6 @@
 const express = require("express");
+const fs = require("fs");
+const path = require("path");
 const helmet = require("helmet");
 const xss = require("xss-clean");
 const mongoSanitize = require("express-mongo-sanitize");
@@ -24,6 +26,35 @@ global.__basedir = __dirname;
 app.set("trust proxy", 1);
 app.use(requestContext);
 app.use(express.static("public"));
+app.get("/job-assets/others/:userId/:filename", (req, res, next) => {
+  const { userId, filename } = req.params;
+  if (!/^[a-f\d]{24}$/i.test(userId) || path.basename(filename) !== filename) {
+    return next();
+  }
+
+  const directory = path.resolve(__dirname, "../public/job-assets/others", userId);
+  const requestedName = filename.replace(/^\d+-/, "");
+  const normalizedName = requestedName.replace(/[^a-z\d.]/gi, "").toLowerCase();
+
+  fs.readdir(directory, (error, entries) => {
+    if (error) return next();
+    const matchingFiles = entries
+      .filter((entry) => {
+        const entryName = entry.replace(/^\d+-/, "");
+        return entryName.replace(/[^a-z\d.]/gi, "").toLowerCase() === normalizedName;
+      })
+      .sort((left, right) => {
+        const leftTimestamp = Number(left.split("-", 1)[0]) || 0;
+        const rightTimestamp = Number(right.split("-", 1)[0]) || 0;
+        return rightTimestamp - leftTimestamp;
+      });
+
+    if (!matchingFiles.length) return next();
+    return res.sendFile(path.join(directory, matchingFiles[0]), (sendError) => {
+      if (sendError) next(sendError);
+    });
+  });
+});
 
 if (config.env !== "test") {
   app.use(morgan.successHandler);
