@@ -152,6 +152,27 @@ const getJob = catchAsync(async (req, res) => {
   res.send(result);
 });
 
+const getJobsAdmin = catchAsync(async (req, res) => {
+  const jobs = await Job.find({}).sort({ createdAt: -1 }).lean();
+  res.status(httpStatus.OK).send({ success: true, data: jobs });
+});
+
+const changeJobStatusAdmin = catchAsync(async (req, res) => {
+  const validStatuses = ["active", "inactive", "inreview"];
+  if (!validStatuses.includes(req.body.status)) {
+    throw new ApiError(httpStatus.BAD_REQUEST, "Invalid job status");
+  }
+  const job = await Job.findByIdAndUpdate(req.params.jobId, { status: req.body.status }, { new: true, runValidators: true });
+  if (!job) throw new ApiError(httpStatus.NOT_FOUND, "Job not found");
+  res.status(httpStatus.OK).send({ success: true, data: job });
+});
+
+const deleteJobAdmin = catchAsync(async (req, res) => {
+  const job = await Job.findByIdAndDelete(req.params.jobId);
+  if (!job) throw new ApiError(httpStatus.NOT_FOUND, "Job not found");
+  res.status(httpStatus.OK).send({ success: true, message: "Job deleted successfully" });
+});
+
 const getJobById = catchAsync(async (req, res) => {
   const job = await jobService.getJobById(req.params.jobId);
   const message = req.query.message || "";
@@ -359,6 +380,9 @@ module.exports = {
   deleteJob,
   updateJob,
   getJob,
+  getJobsAdmin,
+  changeJobStatusAdmin,
+  deleteJobAdmin,
   saveJob,
   getSavedJobs,
   getMyJobs,

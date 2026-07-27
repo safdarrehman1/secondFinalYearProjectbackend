@@ -5,6 +5,9 @@ const applicationController = require("../../controllers/applicationController")
 
 const router = express.Router();
 
+router.get("/admin/all", auth("admin"), applicationController.getApplicationsAdmin);
+router.patch("/admin/:applicationId/status", auth("admin"), applicationController.updateApplicationStatusAdmin);
+
 router.post(
   "/apply/:jobId",
   auth(),

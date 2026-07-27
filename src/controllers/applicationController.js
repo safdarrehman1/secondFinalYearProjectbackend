@@ -447,6 +447,22 @@ const getMyApplications = catchAsync(async (req, res) => {
   });
 });
 
+const getApplicationsAdmin = catchAsync(async (req, res) => {
+  const applications = await Application.find({})
+    .populate("job", "projectTitle position status employmentType workMode")
+    .populate("applicant", "name email profilePicture")
+    .sort({ createdAt: -1 });
+  return res.status(httpStatus.OK).json({ success: true, data: applications });
+});
+
+const updateApplicationStatusAdmin = catchAsync(async (req, res) => {
+  const validStatuses = ["applied", "screening", "test-sent", "test-completed", "under-review", "rejected", "shortlisted", "hired"];
+  if (!validStatuses.includes(req.body.status)) throw new ApiError(httpStatus.BAD_REQUEST, "Invalid application status");
+  const application = await Application.findByIdAndUpdate(req.params.applicationId, { status: req.body.status }, { new: true, runValidators: true });
+  if (!application) throw new ApiError(httpStatus.NOT_FOUND, "Application not found");
+  return res.status(httpStatus.OK).json({ success: true, data: application });
+});
+
 module.exports = {
   applyToJob,
   getApplicationStatus,
@@ -456,4 +472,6 @@ module.exports = {
   updateApplicationStatus,
   withdrawApplication,
   getMyApplications,
+  getApplicationsAdmin,
+  updateApplicationStatusAdmin,
 };
