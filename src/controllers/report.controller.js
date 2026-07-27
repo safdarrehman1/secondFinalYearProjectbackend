@@ -63,8 +63,15 @@ const { deleteReportsAdmin } = require("./user.controller");
 // Gunakan handler admin untuk delete report
 const deleteReport = deleteReportsAdmin;
 
+const dismissReport = catchAsync(async (req, res) => {
+  const result = await reportService.deleteReports([req.params.reportId]);
+  if (!result.deletedCount) return res.status(httpStatus.NOT_FOUND).json({ success: false, message: "Report not found" });
+  return res.status(httpStatus.OK).json({ success: true, message: "Report dismissed" });
+});
+
 module.exports = {
   createBlogReport,
   getReports,
   deleteReport,
+  dismissReport,
 };

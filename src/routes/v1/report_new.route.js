@@ -116,4 +116,6 @@ router.delete(
   reportController.deleteReport,
 );
 
+router.delete("/:reportId/dismiss", auth("manageUsers"), reportController.dismissReport);
+
 module.exports = router;

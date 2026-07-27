@@ -1,12 +1,14 @@
 const express = require('express');
 const router = express.Router();
 const auth = require('../../middlewares/auth');
-const { getAllContactUs } = require('../../controllers/contactUs.controller');
+const { getAllContactUs, updateContactStatus, replyToContact } = require('../../controllers/contactUs.controller');
 const ContactUs = require('../../models/contactUs.model');
 const DailyLimits = require('../../models/dailyLimits.model');
 
 // GET /v1/contact-us (admin only)
-router.get('/', auth(), getAllContactUs);
+router.get('/', auth('admin'), getAllContactUs);
+router.patch('/:contactId/status', auth('admin'), updateContactStatus);
+router.post('/:contactId/reply', auth('admin'), replyToContact);
 
 // POST /v1/contact-us
 router.post('/', async (req, res) => {

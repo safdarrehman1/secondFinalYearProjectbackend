@@ -53,6 +53,9 @@ router.route("/upload-images").post(
 
 // router.route('/myJobs').get(auth('recruiters'), jobController.getMyJobs);
 router.get("/my-jobs", auth(), jobController.getMyJobs);
+router.get("/admin/all", auth("admin"), jobController.getJobsAdmin);
+router.patch("/admin/:jobId/status", auth("admin"), jobController.changeJobStatusAdmin);
+router.delete("/admin/:jobId", auth("admin"), jobController.deleteJobAdmin);
 router.get("/my-jobs-2", auth(), jobController.getMyJobs2);
 router.get(
   "/my-jobs/:jobId/applicants",
