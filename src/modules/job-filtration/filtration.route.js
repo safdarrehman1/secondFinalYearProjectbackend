@@ -7,6 +7,8 @@ const validation = require("./filtration.validation");
 const { errorResponse } = require("../../utils/response");
 const resumeUpload = require("./resume-upload.middleware");
 const interviewController = require("./interview.controller");
+const statusAssistantController = require("./status-assistant.controller");
+const { statusAssistantLimiter } = require("../../middlewares/rateLimiter");
 const router = express.Router();
 
 router.get("/jobs", validate(validation.listJobs), asyncHandler(controller.listJobs));
@@ -27,6 +29,7 @@ router.get("/jobs/:id/applications", auth("user", "recruiter"), validate(validat
 router.patch("/jobs/:id/applications/bulk-review", auth("user", "recruiter"), validate(validation.bulkReview), asyncHandler(controller.bulkReview));
 router.post("/jobs/:id/apply", auth("user", "recruiter"), validate(validation.apply), asyncHandler(controller.apply));
 router.get("/applications/mine", auth("user", "recruiter"), asyncHandler(controller.mine));
+router.post("/assistant/status", auth("user", "recruiter"), statusAssistantLimiter, validate(validation.assistant), asyncHandler(statusAssistantController.ask));
 router.get("/applications/:id", auth("user", "recruiter"), validate(validation.id), asyncHandler(controller.getApplication));
 router.get("/applications/:id/test", auth("user", "recruiter"), validate(validation.id), asyncHandler(controller.getTest));
 router.patch("/applications/:id/test/draft", auth("user", "recruiter"), validate(validation.submit), asyncHandler(controller.saveTestDraft));

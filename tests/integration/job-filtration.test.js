@@ -5,6 +5,8 @@ const setupTestDB = require("../utils/setupTestDB");
 const { User } = require("../../src/models");
 const FiltrationJob = require("../../src/modules/job-filtration/filtration-job.model");
 const FiltrationApplication = require("../../src/modules/job-filtration/filtration-application.model");
+const AuditLog = require("../../src/models/auditLog.model");
+const scoringService = require("../../src/modules/job-filtration/scoring.service");
 const { userOne, userTwo, insertUsers } = require("../fixtures/user.fixture");
 const { userOneAccessToken, userTwoAccessToken } = require("../fixtures/token.fixture");
 
@@ -157,6 +159,27 @@ describe("Job Filtration & Lifecycle Integration", () => {
       const dbJob = await FiltrationJob.findById(job._id);
       expect(dbJob.status).toBe("published");
     });
+
+    test.each([
+      [59.99, httpStatus.BAD_REQUEST],
+      [60, httpStatus.CREATED],
+      [60.01, httpStatus.CREATED],
+    ])("should enforce the non-bypassable resume threshold at %s", async (threshold, expectedStatus) => {
+      const res = await request(app)
+        .post("/api/jobs")
+        .set("Authorization", `Bearer ${posterToken}`)
+        .send({
+          type: "full_time",
+          title: `Threshold ${threshold}`,
+          description: "A sufficiently detailed role description for boundary validation.",
+          scoringConfig: { skillWeight: 0.4, experienceWeight: 0.3, stabilityWeight: 0.3 },
+          minResumePct: threshold,
+          minTestPct: 60,
+          fullTimeDetails: { salaryMin: 5000, salaryMax: 10000, location: "Remote", workMode: "remote", employmentType: "permanent", experienceRequiredYears: 2 },
+        })
+        .expect(expectedStatus);
+      if (expectedStatus === httpStatus.CREATED) expect(res.body.data.minResumePct).toBe(threshold);
+    });
   });
 
   describe("Application pipeline and restrictions", () => {
@@ -219,6 +242,70 @@ describe("Job Filtration & Lifecycle Integration", () => {
         .expect(httpStatus.CONFLICT);
 
       expect(res.body.message).toContain("cooldown");
+    });
+
+    test("should automatically persist and return an improvement report for a 30-59 percent rejection", async () => {
+      const gig = await FiltrationJob.create({
+        poster: poster._id, type: "gig", title: "React API Integration", description: "React, TypeScript, Node.js, testing, and API integration are required.",
+        scoringConfig: { skillWeight: 0.8, experienceWeight: 0.2, stabilityWeight: 0 }, minResumePct: 60, status: "published",
+        gigDetails: { budget: 1000, deadline: new Date(Date.now() + 86400000), deliverables: ["Application"], skillsRequired: ["React", "TypeScript", "Node.js"] },
+      });
+      const scoreMock = jest.spyOn(scoringService, "scoreResume").mockResolvedValueOnce({
+        raw: 45, weighted: 45, breakdown: { skillScore: 45, experienceScore: 0, stabilityScore: 0 }, provider: "gemini", model: "test", scoringVersion: "test", confidence: 0.9, requiresManualReview: false,
+        parsed: { skills: [], missingSkills: [
+          { skill: "React", whyItMatters: "Required for the interface", howToGainIt: "Build a React project" },
+          { skill: "TypeScript", whyItMatters: "Required for type safety", howToGainIt: "Complete a TypeScript course" },
+          { skill: "Node.js", whyItMatters: "Required for the API", howToGainIt: "Build a Node.js API" },
+        ] },
+      });
+      try {
+        const created = await request(app).post(`/api/jobs/${gig._id}/apply`).set("Authorization", `Bearer ${candidateToken}`).send({ resumeText: "Junior developer with basic HTML and CSS project experience seeking a software role." }).expect(httpStatus.CREATED);
+        expect(created.body.data.finalStatus).toBe("rejected");
+        expect(created.body.data.improvementReport.items).toHaveLength(3);
+        const applicationId = created.body.data.id || created.body.data._id;
+        const stored = await FiltrationApplication.findById(applicationId);
+        expect(stored.improvementReport.score).toBe(45);
+        expect(stored.improvementReport.items).toHaveLength(3);
+        const retrieved = await request(app).get(`/api/applications/${applicationId}`).set("Authorization", `Bearer ${candidateToken}`).expect(httpStatus.OK);
+        expect(retrieved.body.data.improvementReport.items).toHaveLength(3);
+      } finally { scoreMock.mockRestore(); }
+    });
+  });
+
+  describe("Authenticated application status assistant", () => {
+    let ownApplication, foreignApplication;
+    beforeEach(async () => {
+      const job = await FiltrationJob.create({ poster: poster._id, type: "full_time", title: "Backend Engineer", description: "Build secure backend services and APIs for the platform.", scoringConfig: { skillWeight: 0.4, experienceWeight: 0.3, stabilityWeight: 0.3 }, minResumePct: 60, status: "published", fullTimeDetails: { salaryMin: 5000, salaryMax: 10000, location: "Remote", workMode: "remote", employmentType: "permanent", experienceRequiredYears: 2 } });
+      ownApplication = await FiltrationApplication.create({ job: job._id, candidate: candidate._id, resumeStatus: "passed", finalStatus: "shortlisted" });
+      foreignApplication = await FiltrationApplication.create({ job: job._id, candidate: poster._id, resumeStatus: "failed", finalStatus: "rejected" });
+    });
+
+    test("should reject anonymous assistant access", async () => {
+      await request(app).post("/api/assistant/status").set("X-Forwarded-For", "10.0.0.11").send({ message: "What is my application status?" }).expect(httpStatus.UNAUTHORIZED);
+    });
+
+    test("should return only the signed-in candidate's correct status", async () => {
+      const res = await request(app).post("/api/assistant/status").set("X-Forwarded-For", "10.0.0.12").set("Authorization", `Bearer ${candidateToken}`).send({ message: `What is the status of application ${ownApplication._id}?` }).expect(httpStatus.OK);
+      expect(res.body.data.applications).toHaveLength(1);
+      expect(res.body.data.applications[0].applicationId).toBe(String(ownApplication._id));
+      expect(res.body.data.applications[0].status).toBe("shortlisted");
+      const audit = await AuditLog.findOne({ actor: candidate._id, action: "status_assistant.query" });
+      expect(audit).toBeTruthy();
+    });
+
+    test("should not reveal another candidate's application", async () => {
+      const res = await request(app).post("/api/assistant/status").set("X-Forwarded-For", "10.0.0.13").set("Authorization", `Bearer ${candidateToken}`).send({ message: `What is the status of application ${foreignApplication._id}?` }).expect(httpStatus.OK);
+      expect(res.body.data.applications).toHaveLength(0);
+      expect(res.body.data.answer).toContain("your account");
+    });
+
+    test("should rate limit repeated assistant requests", async () => {
+      const call = () => request(app).post("/api/assistant/status").set("X-Forwarded-For", "10.0.0.14").set("Authorization", `Bearer ${candidateToken}`).send({ message: "What is my latest application status?" });
+      await call().expect(httpStatus.OK);
+      await call().expect(httpStatus.OK);
+      await call().expect(httpStatus.OK);
+      const blocked = await call().expect(httpStatus.TOO_MANY_REQUESTS);
+      expect(blocked.body.message).toContain("Too many assistant requests");
     });
   });
 

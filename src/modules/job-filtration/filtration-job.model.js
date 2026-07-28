@@ -26,7 +26,7 @@ const filtrationJobSchema = new mongoose.Schema({
   closedAt: Date,
   lifecycleHistory: { type: [lifecycleEventSchema], default: [] },
   scoringConfig: { type: scoringConfigSchema, required: true },
-  minResumePct: { type: Number, min: 0, max: 100, default: 60 },
+  minResumePct: { type: Number, min: 60, max: 100, default: 60 },
   minTestPct: { type: Number, min: 0, max: 100, default: 60 },
   cooldownDays: { type: Number, min: 0, max: 365, default: 30 },
   gigDetails: {

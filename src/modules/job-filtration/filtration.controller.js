@@ -13,6 +13,7 @@ const Resume = require("./resume-document.model");
 const applicationService = require("../../services/applicationService");
 const { uploadFileToS3 } = require("../../utils/s3Upload");
 const notificationService = require("../../services/notification.service");
+const { buildImprovementReport } = require("./improvement-report.service");
 
 const resumeSimilarity = (left, right) => {
   const tokens = (text) => new Set(String(text || "").toLowerCase().match(/[a-z0-9+#.]{2,}/g) || []);
@@ -110,7 +111,11 @@ exports.apply = async (req, res) => {
   if (result.requiresManualReview) applicationStatus.changeStatus(application, "under_review", req.user.id, "Automated scoring unavailable; queued for manual review");
   else if (application.resumeStatus === "passed" && test) { application.testStatus = "unlocked"; applicationStatus.changeStatus(application, "test_unlocked", req.user.id, "Resume gate passed"); }
   else if (application.resumeStatus === "passed") applicationStatus.changeStatus(application, job.type === "gig" ? "shortlisted" : "resume_screened", req.user.id, "Resume gate passed");
-  else { applicationStatus.changeStatus(application, "rejected", req.user.id, "Resume score did not meet the required threshold"); application.reapplyAfter = new Date(Date.now() + job.cooldownDays * 86400000); }
+  else {
+    applicationStatus.changeStatus(application, "rejected", req.user.id, "Resume score did not meet the required threshold");
+    application.reapplyAfter = new Date(Date.now() + job.cooldownDays * 86400000);
+    application.improvementReport = buildImprovementReport({ score: result.weighted, parsed: result.parsed, job });
+  }
   await application.save(); emitUpdate(req, application, application.finalStatus); return successResponse(res, application, "Application screened", 201);
 };
 exports.getApplication = async (req, res) => { const item = await Application.findById(req.params.id); if (!item) throw new ApiError(404, "Application not found"); if (![String(item.candidate), String((await Job.findById(item.job))?.poster)].includes(String(req.user.id))) throw new ApiError(403, "Forbidden"); return successResponse(res, item); };

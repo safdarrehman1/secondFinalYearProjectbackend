@@ -149,6 +149,7 @@ const getJob = catchAsync(async (req, res) => {
   const limit = parseInt(req.query.limit) || 10;
 
   const result = await jobService.getJobs(page, limit);
+  res.set("Cache-Control", "public, max-age=30, stale-while-revalidate=300");
   res.send(result);
 });
 

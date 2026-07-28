@@ -17,6 +17,18 @@ const schema = new mongoose.Schema({
   posterNotes: { type: String, trim: true, maxlength: 5000 },
   tags: [{ type: String, trim: true, maxlength: 50 }],
   rejectionReason: { type: String, trim: true, maxlength: 1000 },
+  improvementReport: {
+    generatedAt: Date,
+    score: Number,
+    provider: String,
+    summary: { type: String, trim: true, maxlength: 2000 },
+    items: [{
+      skill: { type: String, trim: true, maxlength: 100 },
+      whyItMatters: { type: String, trim: true, maxlength: 500 },
+      action: { type: String, trim: true, maxlength: 500 },
+      evidenceNeeded: { type: String, trim: true, maxlength: 500 },
+    }],
+  },
   withdrawnAt: Date,
   statusHistory: [{
     from: String, to: { type: String, required: true }, changedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
