@@ -104,22 +104,26 @@ const queryJobs = async (filter, options) => {
 const getJobs = async (page, limit) => {
   const skip = (page - 1) * limit;
 
-  const jobs = await Job.find()
-    .select(
-      "applicantName applicantAvata status createdOn applicantBackgroundImage budget category createdAt createdBy cultureArea description id preferredLocation projectTitle timeFrame savedBy position designCategory designSubcategory jobType applications",
-    )
-    .skip(skip)
-    .limit(limit)
-    .lean();
-  console.log("Jobs:", jobs);
-  console.log("First job position:", jobs[0]?.position);
+  const [jobs, total] = await Promise.all([
+    Job.find()
+      .select(
+        "applicantName applicantAvatar status createdOn applicantBackgroundImage budget category createdAt createdBy cultureArea description preferredLocation projectTitle timeFrame savedBy position designCategory designSubcategory jobType",
+      )
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean(),
+    Job.countDocuments(),
+  ]);
   // Ambil semua userId unik dari createdBy
   const userIds = [...new Set(jobs.map((job) => job.createdBy))];
 
   // Ambil semua userSpace terkait
   const userSpaces = await UserSpace.find({
     createdBy: { $in: userIds },
-  }).lean();
+  })
+    .select("createdBy firstName lastName profilePicture creationOccupation companyOrStudio address location city state")
+    .lean();
   const userSpaceMap = {};
   userSpaces.forEach((u) => {
     userSpaceMap[u.createdBy?.toString()] = u;
@@ -131,8 +135,6 @@ const getJobs = async (page, limit) => {
     id: job._id?.toString(),
     userSpace: userSpaceMap[job.createdBy?.toString()] || null,
   }));
-
-  const total = await Job.countDocuments();
 
   return {
     jobs: jobsWithUserSpace,

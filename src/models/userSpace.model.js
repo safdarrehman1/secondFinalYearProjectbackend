@@ -139,6 +139,7 @@ const userSpaceSchema = mongoose.Schema(
 // add plugin that converts mongoose to json
 userSpaceSchema.plugin(toJSON);
 userSpaceSchema.plugin(paginate);
+userSpaceSchema.index({ createdBy: 1 });
 
 /**
  * @typedef UserSpace

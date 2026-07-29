@@ -140,6 +140,8 @@ const jobSchema = mongoose.Schema(
 
 jobSchema.plugin(toJSON);
 jobSchema.plugin(paginate);
+jobSchema.index({ createdAt: -1 });
+jobSchema.index({ status: 1, createdAt: -1 });
 
 const Job = mongoose.model("Job", jobSchema);
 
