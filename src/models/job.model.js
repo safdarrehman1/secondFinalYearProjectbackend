@@ -132,6 +132,19 @@ const jobSchema = mongoose.Schema(
         type: String,
       },
     ],
+    questionSource: {
+      type: String,
+      enum: ["ai", "manual"],
+      default: "ai",
+    },
+    customQuestions: [
+      {
+        questionText: { type: String, required: true },
+        type: { type: String, enum: ["mcq", "text"], default: "mcq" },
+        options: [{ type: String }],
+        correctAnswer: { type: String },
+      },
+    ],
   },
   {
     timestamps: true,

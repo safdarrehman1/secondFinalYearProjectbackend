@@ -30,7 +30,57 @@ const postJob = {
     }).optional(),
     requiredExperience: Joi.string().optional().allow(""),
     requiredSkills: Joi.array().items(Joi.string()).optional(),
+    questionSource: Joi.string().valid("ai", "manual").optional(),
+    customQuestions: Joi.array().items(
+      Joi.object().keys({
+        questionText: Joi.string().optional().allow(""),
+        type: Joi.string().valid("mcq", "text").optional(),
+        options: Joi.array().items(Joi.string().allow("")).optional(),
+        correctAnswer: Joi.string().optional().allow(""),
+      })
+    ).optional(),
+  }).unknown(true),
+};
+
+const updateJob = {
+  params: Joi.object().keys({
+    jobId: Joi.string().custom(objectId).required(),
   }),
+  body: Joi.object().keys({
+    position: Joi.string().optional().allow(""),
+    projectTitle: Joi.string().optional(),
+    category: Joi.array().items(Joi.string()).min(0).max(5).optional(),
+    cultureArea: Joi.array().items(Joi.string()).optional(),
+    designCategory: Joi.string().optional(),
+    designSubcategory: Joi.array().items(Joi.string()).optional(),
+    jobType: Joi.array().items(Joi.string()).optional(),
+    budget: Joi.string().optional(),
+    timeFrame: Joi.string().optional(),
+    preferredLocation: Joi.string().optional().allow(""),
+    description: Joi.string().optional(),
+    applicantName: Joi.string().optional().allow(""),
+    applicantAvatar: Joi.string().uri().optional(),
+    applicantBackgroundImage: Joi.string().uri().optional(),
+    employmentType: Joi.string().valid("freelance-project", "full-time", "part-time", "contract", "internship").optional(),
+    workMode: Joi.string().valid("remote", "onsite", "hybrid").optional(),
+    applicationFlow: Joi.string().valid("proposal", "resume-application").optional(),
+    salaryRange: Joi.object().keys({
+      min: Joi.number().optional(),
+      max: Joi.number().optional(),
+      currency: Joi.string().optional(),
+    }).optional(),
+    requiredExperience: Joi.string().optional().allow(""),
+    requiredSkills: Joi.array().items(Joi.string()).optional(),
+    questionSource: Joi.string().valid("ai", "manual").optional(),
+    customQuestions: Joi.array().items(
+      Joi.object().keys({
+        questionText: Joi.string().optional().allow(""),
+        type: Joi.string().valid("mcq", "text").optional(),
+        options: Joi.array().items(Joi.string().allow("")).optional(),
+        correctAnswer: Joi.string().optional().allow(""),
+      })
+    ).optional(),
+  }).unknown(true),
 };
 
 const getJobs = {
@@ -79,6 +129,7 @@ const applyJob = {
 
 module.exports = {
   postJob,
+  updateJob,
   getJobs,
   getJobById,
   applyJob,

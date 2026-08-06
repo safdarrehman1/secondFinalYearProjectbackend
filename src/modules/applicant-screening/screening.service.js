@@ -3,48 +3,17 @@ const dns = require('dns').promises;
 const config = require('../../config/config');
 const Questionnaire = require('./questionnaire.model');
 const QuestionnaireResponse = require('./questionnaire-response.model');
+const AppliedJobs = require('../../models/appliedJobs.model');
+const aiService = require('../../services/aiService');
 
-const aiJson = async (systemInstruction, prompt, maxOutputTokens = 1800, temperature = 0.2, model = config.gemini.model, userId = null, endpoint = "unknown") => {
-  if (!config.gemini.apiKey) throw new Error('Gemini API key is not configured');
-  const { logAiRequest } = require('../../services/aiLogger.service');
-  const startTime = Date.now();
-  try {
-    const response = await axios.post(
-      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
-      {
-        systemInstruction: { parts: [{ text: systemInstruction }] },
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: { temperature, maxOutputTokens, responseMimeType: 'application/json' },
-      },
-      { headers: { 'x-goog-api-key': config.gemini.apiKey }, timeout: 15000 },
-    );
-    const text = response.data?.candidates?.[0]?.content?.parts?.map((part) => part.text || '').join('');
-    if (!text) throw new Error('AI returned no content');
-    const usage = response.data.usageMetadata || {};
-    const latencyMs = Date.now() - startTime;
-    logAiRequest({
-      userId,
-      endpoint,
-      model,
-      promptTokens: usage.promptTokenCount || 0,
-      completionTokens: usage.candidatesTokenCount || 0,
-      totalTokens: usage.totalTokenCount || 0,
-      latencyMs,
-      status: 'success',
-    });
-    return JSON.parse(text);
-  } catch (error) {
-    const latencyMs = Date.now() - startTime;
-    logAiRequest({
-      userId,
-      endpoint,
-      model,
-      latencyMs,
-      status: 'failed',
-      errorMessage: error.message,
-    });
-    throw error;
-  }
+const aiJson = async (systemInstruction, prompt, maxOutputTokens = 1800, temperature = 0.2, model = null, userId = null, endpoint = "unknown") => {
+  return aiService.generateJson(
+    systemInstruction,
+    prompt,
+    { maxOutputTokens, temperature, model: model || config.gemini.model },
+    userId,
+    endpoint
+  );
 };
 
 const normalizeProjects = (projects) => (Array.isArray(projects) ? projects : []).slice(0, 20).map((project) => ({
@@ -78,7 +47,7 @@ const parseResume = async (resumeText, jobDescription, userId = null) => {
     `Resume:\n${resumeText.slice(0, 18000)}\n\nReturn {"skills":["..."],"about_summary":"...","projects":[{"name":"...","description":"...","link":null}]}`,
     1800,
     0.2,
-    config.gemini.model,
+    null,
     userId,
     "/v1/applications/parse-resume-facts"
   );
@@ -90,7 +59,7 @@ const parseResume = async (resumeText, jobDescription, userId = null) => {
     `Job description:\n${String(jobDescription || '').slice(0, 8000)}\n\nApplicant skills: ${skills.join(', ')}\nApplicant summary: ${aboutSummary}\nApplicant projects: ${JSON.stringify(projects).slice(0, 7000)}\n\nReturn this exact structure:\n{"match_score":0,"suggested_description":"2-4 sentences explaining the result and next action","missing_skills":[{"skill":"specific missing job skill","why_it_matters":"job-specific reason","how_to_gain_it":"concrete improvement action"}],"relevant_projects_without_links":[{"project_name":"exact project name from resume","skills":["job-relevant skill demonstrated by this project"]}]}\nRules: match_score is 0-100. missing_skills must contain only requirements that are in the JD and absent or unsupported in the resume. relevant_projects_without_links must include only projects that are relevant to this JD, demonstrate a matched skill, and have no link in the resume. Do not include projects that already have a link.`,
     1200,
     0.2,
-    config.gemini.model,
+    null,
     userId,
     "/v1/applications/parse-resume-fit"
   );
@@ -121,45 +90,169 @@ const seededShuffle = (items, seedText) => {
   return shuffled;
 };
 
-const generateQuestionnaire = async (application, job) => {
+const generateQuestionnaire = async (application, job, userId = null) => {
   let questions = [];
-  let lastError;
-  for (let attempt = 0; attempt < 2 && questions.length !== 8; attempt += 1) {
+
+  if (job && job.questionSource === 'manual') {
+    const rawCustom = (Array.isArray(job.customQuestions) && job.customQuestions.length > 0)
+      ? job.customQuestions
+      : (Array.isArray(job.test?.questions) ? job.test.questions : []);
+
+    if (rawCustom.length > 0) {
+      questions = rawCustom.map((q, index) => ({
+        id: `q${index + 1}`,
+        type: q.type === 'text' ? 'text' : 'mcq',
+        prompt: String(q.questionText || q.prompt || '').trim(),
+        options: Array.isArray(q.options) ? q.options.map(String).map((o) => o.trim()).filter(Boolean) : [],
+        correctAnswer: String(q.correctAnswer || q.correct_answer || '').trim(),
+      }));
+
+      questions = seededShuffle(questions, `${application._id}:questions`).map((question, index) => ({
+        ...question,
+        id: `q${index + 1}`,
+        options: question.options.length ? seededShuffle(question.options, `${application._id}:options:${index}`) : [],
+      }));
+
+      return Questionnaire.findOneAndUpdate(
+        { applicationId: application._id },
+        { applicationId: application._id, questions },
+        { new: true, upsert: true, setDefaultsOnInsert: true },
+      );
+    }
+  }
+
+  const otherApplicationIds = await AppliedJobs.find({ jobId: application.jobId, _id: { $ne: application._id } }).distinct('_id');
+  const previousQuestionnaires = otherApplicationIds.length
+    ? await Questionnaire.find({ applicationId: { $in: otherApplicationIds } }).select('questions.prompt').lean()
+    : [];
+  const previousPrompts = new Set(previousQuestionnaires.flatMap((questionnaire) =>
+    (questionnaire.questions || []).map((question) => String(question.prompt || '').trim().toLowerCase()).filter(Boolean)));
+  const exclusions = [...previousPrompts].slice(0, 40);
+
+  for (let attempt = 0; attempt < 2 && questions.length < 5; attempt += 1) {
     try {
       const result = await aiJson(
         'Create fair, job-relevant, applicant-specific screening questions. Return JSON only.',
-        `Application variant: ${application._id}\nJob title: ${job.projectTitle || job.position || ''}\nJob description: ${String(job.description || '').slice(0, 8000)}\nApplicant resume summary: ${String(application.parsedAbout || '').slice(0, 3000)}\nApplicant skills: ${(application.parsedSkills || []).join(', ')}\nApplicant projects: ${JSON.stringify(application.parsedProjects || []).slice(0, 5000)}\nCreate exactly 8 original MCQs tailored to this applicant's resume evidence and this job description. Cover different relevant skills and avoid generic workplace questions. Do not reuse fixed or stock questions. Return {"questions":[{"id":"q1","type":"mcq","prompt":"...","options":["..."],"correct_answer":"exact option text"}]}. Each must have exactly 4 distinct options and one unambiguous answer.`,
+        `Application variant: ${application._id}-${attempt + 1}\nCandidate variant: ${application.createdBy || application.candidate || userId || ''}\nJob title: ${job?.projectTitle || job?.position || ''}\nJob description: ${String(job?.description || '').slice(0, 8000)}\nApplicant resume summary: ${String(application.parsedAbout || '').slice(0, 3000)}\nApplicant skills: ${(application.parsedSkills || []).join(', ')}\nApplicant projects: ${JSON.stringify(application.parsedProjects || []).slice(0, 5000)}\nQuestions already used for this job and forbidden for this applicant: ${JSON.stringify(exclusions)}\nCreate 5 to 8 original MCQs tailored to this applicant's specific resume evidence and this job description. Return {"questions":[{"id":"q1","type":"mcq","prompt":"...","options":["..."],"correct_answer":"exact option text"}]}. Each must have exactly 4 distinct options and one unambiguous answer.`,
         2600,
         0.65,
-        attempt === 0 ? config.gemini.model : 'gemini-3.1-flash-lite',
+        config.gemini.model,
         userId,
         "/v1/applications/generate-screening-test-mcq"
       );
-      questions = (Array.isArray(result.questions) ? result.questions : []).slice(0, 8).map((q, index) => ({
-        id: `q${index + 1}`, type: 'mcq', prompt: String(q.prompt || '').trim(),
-        options: [...new Set((Array.isArray(q.options) ? q.options : []).map(String).map((option) => option.trim()).filter(Boolean))].slice(0, 4),
-        correctAnswer: String(q.correct_answer || q.correctAnswer || '').trim(),
-      })).filter((q) => q.prompt && q.options.length === 4 && q.options.includes(q.correctAnswer));
-    } catch (error) {
-      lastError = error;
+
+      const parsed = (Array.isArray(result.questions) ? result.questions : []).map((q, index) => {
+        const promptText = String(q.prompt || '').trim();
+        const opts = [...new Set((Array.isArray(q.options) ? q.options : []).map(String).map((o) => o.trim()).filter(Boolean))].slice(0, 4);
+        let correct = String(q.correct_answer || q.correctAnswer || '').trim();
+        if (opts.length > 0 && !opts.includes(correct)) {
+          const match = opts.find((o) => o.toLowerCase() === correct.toLowerCase()) || opts[0];
+          correct = match;
+        }
+        return {
+          id: `q${index + 1}`,
+          type: 'mcq',
+          prompt: promptText,
+          options: opts,
+          correctAnswer: correct,
+        };
+      }).filter((q) => q.prompt && q.options.length >= 2);
+
+      const filtered = attempt === 0
+        ? parsed.filter((q) => !previousPrompts.has(q.prompt.toLowerCase()))
+        : parsed;
+
+      if (filtered.length > questions.length) {
+        questions = filtered;
+      }
+    } catch (err) {
+      console.warn(`AI questionnaire generation attempt ${attempt + 1} failed: ${err.message}`);
     }
   }
-  if (questions.length !== 8) throw lastError || new Error('AI did not return exactly 8 valid questions');
-  questions = seededShuffle(questions, `${application._id}:questions`).map((question, index) => ({
-    ...question,
+
+  // Fallback if AI generation returns fewer than 4 questions
+  if (questions.length < 4) {
+    const title = job?.projectTitle || job?.position || 'Role';
+    const reqSkill = (job?.requiredSkills || job?.cultureArea || ['Technical Knowledge'])[0] || 'Technical Knowledge';
+    questions = [
+      {
+        id: 'q1', type: 'mcq',
+        prompt: `What is the most effective engineering approach when working as a ${title}?`,
+        options: [
+          'Following established design patterns, writing tests, and documenting implementation',
+          'Deploying code directly to production without testing',
+          'Bypassing security protocols to meet immediate deadlines',
+          'Refusing to collaborate or review peer contributions'
+        ],
+        correctAnswer: 'Following established design patterns, writing tests, and documenting implementation'
+      },
+      {
+        id: 'q2', type: 'mcq',
+        prompt: `When applying ${reqSkill} in project development, which principle ensures long-term system stability?`,
+        options: [
+          'Modular code organization with automated verification and clear boundaries',
+          'Hardcoding configuration values directly into business logic',
+          'Ignoring error handling and logging mechanisms',
+          'Deleting version control history frequently'
+        ],
+        correctAnswer: 'Modular code organization with automated verification and clear boundaries'
+      },
+      {
+        id: 'q3', type: 'mcq',
+        prompt: `How should unexpected edge cases or architectural bottlenecks be addressed during execution?`,
+        options: [
+          'Analyze root cause, prototype solution, measure performance, and communicate changes',
+          'Ignore errors until users report system downtime',
+          'Suppress warning logs without addressing underlying bugs',
+          'Abandon project requirements without consulting stakeholders'
+        ],
+        correctAnswer: 'Analyze root cause, prototype solution, measure performance, and communicate changes'
+      },
+      {
+        id: 'q4', type: 'mcq',
+        prompt: `What practice best ensures software quality before releasing new features?`,
+        options: [
+          'Comprehensive unit testing, integration tests, and peer code reviews',
+          'Relying solely on manual inspection in production',
+          'Disabling all linter rules and continuous integration checks',
+          'Deploying untested code during peak traffic hours'
+        ],
+        correctAnswer: 'Comprehensive unit testing, integration tests, and peer code reviews'
+      },
+      {
+        id: 'q5', type: 'mcq',
+        prompt: `What is critical when integrating new components into an existing architecture?`,
+        options: [
+          'Ensuring backward compatibility, API contracts, and updating technical docs',
+          'Breaking public API signatures without deprecation notices',
+          'Removing automated test suites to speed up build times',
+          'Committing credentials directly to source control'
+        ],
+        correctAnswer: 'Ensuring backward compatibility, API contracts, and updating technical docs'
+      }
+    ];
+  }
+
+  questions = questions.slice(0, 8).map((q, index) => ({
+    ...q,
     id: `q${index + 1}`,
-    options: seededShuffle(question.options, `${application._id}:options:${index}`),
   }));
+
   return Questionnaire.findOneAndUpdate(
-    { applicationId: application._id }, { applicationId: application._id, questions }, { new: true, upsert: true, setDefaultsOnInsert: true },
+    { applicationId: application._id },
+    { applicationId: application._id, questions },
+    { new: true, upsert: true, setDefaultsOnInsert: true },
   );
 };
 
-const publicQuestionnaire = (questionnaire) => ({
-  id: questionnaire._id,
-  applicationId: questionnaire.applicationId,
-  questions: questionnaire.questions.map(({ id, type, prompt, options }) => ({ id, type, prompt, options })),
-});
+const publicQuestionnaire = (questionnaire) => {
+  if (!questionnaire) return null;
+  const obj = typeof questionnaire.toObject === "function" ? questionnaire.toObject() : questionnaire;
+  return {
+    ...obj,
+    questions: (obj.questions || []).map(({ correctAnswer, ...q }) => q),
+  };
+};
 
 const submitAnswers = async (questionnaire, answers) => {
   const answerMap = new Map((Array.isArray(answers) ? answers : []).map((a) => [String(a.questionId), String(a.answer || '')]));

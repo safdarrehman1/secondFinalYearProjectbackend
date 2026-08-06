@@ -1,17 +1,37 @@
 const Joi = require("joi");
 const objectId = Joi.string().hex().length(24);
 const scoringConfig = Joi.object({
-  skillWeight: Joi.number().min(0).max(1).required(), experienceWeight: Joi.number().min(0).max(1).required(), stabilityWeight: Joi.number().min(0).max(1).required(),
+  skillWeight: Joi.number().min(0).max(1).required(),
+  experienceWeight: Joi.number().min(0).max(1).required(),
+  stabilityWeight: Joi.number().min(0).max(1).required(),
 }).custom((value, helpers) => Math.abs(value.skillWeight + value.experienceWeight + value.stabilityWeight - 1) < 0.001 ? value : helpers.error("any.invalid"));
+
 const jobBody = Joi.object({
-  type: Joi.string().valid("gig", "full_time").required(), title: Joi.string().min(3).max(200).required(), description: Joi.string().min(20).max(20000).required(),
-  scoringConfig: scoringConfig.required(), minResumePct: Joi.number().min(60).max(100), minTestPct: Joi.number().min(0).max(100), cooldownDays: Joi.number().integer().min(0).max(365),
+  type: Joi.string().valid("gig", "full_time").required(),
+  title: Joi.string().min(3).max(200).required(),
+  description: Joi.string().min(20).max(20000).required(),
+  scoringConfig: scoringConfig.required(),
+  minResumePct: Joi.number().min(60).max(100),
+  minTestPct: Joi.number().min(0).max(100),
+  cooldownDays: Joi.number().integer().min(0).max(365),
   gigDetails: Joi.when("type", { is: "gig", then: Joi.object({ budget: Joi.number().positive().required(), deadline: Joi.date().required(), deliverables: Joi.array().items(Joi.string()), skillsRequired: Joi.array().items(Joi.string()).min(1).required(), durationEstimate: Joi.string() }).required(), otherwise: Joi.forbidden() }),
   fullTimeDetails: Joi.when("type", { is: "full_time", then: Joi.object({ salaryMin: Joi.number().min(0).required(), salaryMax: Joi.number().min(Joi.ref("salaryMin")).required(), location: Joi.string().required(), workMode: Joi.string().valid("remote", "onsite", "hybrid").required(), department: Joi.string(), employmentType: Joi.string().valid("contract", "permanent").required(), experienceRequiredYears: Joi.number().min(0).required(), jdDocumentUrl: Joi.string().uri() }).required(), otherwise: Joi.forbidden() }),
-});
+  questionSource: Joi.string().valid("ai", "manual").optional(),
+  customQuestions: Joi.array().items(
+    Joi.object().keys({
+      questionText: Joi.string().optional().allow(""),
+      type: Joi.string().valid("mcq", "text").optional(),
+      options: Joi.array().items(Joi.string().allow("")).optional(),
+      correctAnswer: Joi.string().optional().allow(""),
+    })
+  ).optional(),
+}).unknown(true);
+
 module.exports = {
-  createJob: { body: jobBody }, updateJob: { params: Joi.object({ id: objectId.required() }), body: jobBody.fork(["type", "title", "description", "scoringConfig"], (schema) => schema.optional()) },
-  id: { params: Joi.object({ id: objectId.required() }) }, listJobs: { query: Joi.object({ type: Joi.string().valid("gig", "full_time"), finalStatus: Joi.string(), flaggedForReview: Joi.boolean(), minScore: Joi.number().min(0).max(100), maxScore: Joi.number().min(0).max(100), tags: Joi.string(), sort: Joi.string().valid("newest", "score"), page: Joi.number().integer().min(1), limit: Joi.number().integer().min(1).max(100) }) },
+  createJob: { body: jobBody },
+  updateJob: { params: Joi.object({ id: objectId.required() }), body: jobBody.fork(["type", "title", "description", "scoringConfig"], (schema) => schema.optional()) },
+  id: { params: Joi.object({ id: objectId.required() }) },
+  listJobs: { query: Joi.object({ type: Joi.string().valid("gig", "full_time"), finalStatus: Joi.string(), flaggedForReview: Joi.boolean(), minScore: Joi.number().min(0).max(100), maxScore: Joi.number().min(0).max(100), tags: Joi.string(), sort: Joi.string().valid("newest", "score"), page: Joi.number().integer().min(1), limit: Joi.number().integer().min(1).max(100) }) },
   createTest: { params: Joi.object({ id: objectId.required() }), body: Joi.object({ type: Joi.string().valid("mcq", "task").required(), timeLimitMinutes: Joi.number().integer().min(1).required(), proctoringEnabled: Joi.boolean(), maxAttempts: Joi.number().integer().min(1).max(5), questions: Joi.array().items(Joi.object({ prompt: Joi.string().required(), options: Joi.array().items(Joi.string()), correctAnswer: Joi.string(), taskSpec: Joi.string(), rubric: Joi.array().items(Joi.string()) })).min(1).required() }) },
   apply: { params: Joi.object({ id: objectId.required() }), body: Joi.object({ resumeId: objectId, resumeUrl: Joi.string().uri().allow(""), resumeText: Joi.string().min(50).max(100000).when("resumeId", { is: Joi.exist(), then: Joi.optional(), otherwise: Joi.required() }) }) },
   submit: { params: Joi.object({ id: objectId.required() }), body: Joi.object({ answers: Joi.array().items(Joi.object({ questionId: objectId.required(), response: Joi.string().allow("").required() })).default([]), proctoringFlags: Joi.array().items(Joi.string().valid("tab_switch", "paste_detected", "fullscreen_exit")) }) },
