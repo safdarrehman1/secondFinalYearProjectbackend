@@ -336,73 +336,27 @@ const renderResumeToPdf = async (resume) => {
  * @param {object} context
  * @returns {Promise<string>}
  */
-const generateSectionContent = async (prompt, context) => {
-  if (!config.gemini.apiKey) {
-    throw new Error("Gemini API key is not configured");
-  }
+const aiService = require("./aiService");
 
+const generateSectionContent = async (prompt, context) => {
   const systemInstruction = `You are a professional, expert CV/resume writer and career coach. Your task is to rewrite, refine, or write content for a resume section based on the user's raw input. Do not include conversational filler, intro/outro, greetings, or markdown fences (like \`\`\`). Return ONLY the refined, clean content directly suitable for copy-pasting into a resume. The user is focusing on the section: "${context.sectionType}".`;
 
   const queryPrompt = `User Raw Input: "${prompt}"\nExisting Content in Section: "${context.existingContent || ""}"\nOther Resume Context (Title/Role): "${context.title || ""}"`;
 
-  const { logAiRequest } = require("./aiLogger.service");
-  const startTime = Date.now();
+  const result = await aiService.generateContent(
+    systemInstruction,
+    queryPrompt,
+    { temperature: 0.3, maxOutputTokens: 1024 },
+    context.userId,
+    "/v1/resume/chat-assist"
+  );
 
-  try {
-    const response = await axios.post(
-      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(config.gemini.model)}:generateContent`,
-      {
-        systemInstruction: { parts: [{ text: systemInstruction }] },
-        contents: [{ role: "user", parts: [{ text: queryPrompt }] }],
-        generationConfig: {
-          temperature: 0.3,
-          maxOutputTokens: 1024,
-        },
-      },
-      { headers: { "x-goog-api-key": config.gemini.apiKey } }
-    );
-
-    const text = response.data?.candidates?.[0]?.content?.parts
-      ?.map((part) => part.text || "")
-      .join("");
-
-    if (!text) {
-      throw new Error("Invalid response from Gemini AI client");
-    }
-
-    const usage = response.data.usageMetadata || {};
-    const latencyMs = Date.now() - startTime;
-
-    logAiRequest({
-      userId: context.userId,
-      endpoint: "/v1/resume/chat-assist",
-      model: config.gemini.model,
-      promptTokens: usage.promptTokenCount || 0,
-      completionTokens: usage.candidatesTokenCount || 0,
-      totalTokens: usage.totalTokenCount || 0,
-      latencyMs,
-      status: "success",
-    });
-
-    // Clean markdown blocks, code fences, stray quotes
-    return text
-      .replace(/^```[a-zA-Z]*\n/gm, "")
-      .replace(/```$/gm, "")
-      .replace(/^["']/g, "")
-      .replace(/["']$/g, "")
-      .trim();
-  } catch (error) {
-    const latencyMs = Date.now() - startTime;
-    logAiRequest({
-      userId: context.userId,
-      endpoint: "/v1/resume/chat-assist",
-      model: config.gemini.model,
-      latencyMs,
-      status: "failed",
-      errorMessage: error.message,
-    });
-    throw error;
-  }
+  return result.text
+    .replace(/^```[a-zA-Z]*\n/gm, "")
+    .replace(/```$/gm, "")
+    .replace(/^["']/g, "")
+    .replace(/["']$/g, "")
+    .trim();
 };
 
 module.exports = {

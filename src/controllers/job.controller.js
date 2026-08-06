@@ -5,22 +5,38 @@ const ApiError = require("../utils/ApiError");
 const catchAsync = require("../utils/catchAsync");
 const { jobService } = require("../services");
 const { Job } = require("../models");
-const chatController = require("./chat.controller"); // Import chat controller
-const User = require("../models/user.model"); // Import User model
-const ChatService = require("../services/chat.service"); // Import ChatService
-const UserSpace = require("../models/userSpace.model"); // Import UserSpace model
+const chatController = require("./chat.controller");
+const User = require("../models/user.model");
+const ChatService = require("../services/chat.service");
+const UserSpace = require("../models/userSpace.model");
 const reportService = require("../services/report.service");
 const { verifyResumeAnalysisToken } = require("./ai.controller");
 const screeningService = require("../modules/applicant-screening/screening.service");
-//const upload = require('../config/multer');
+
+const validateManualQuestions = (questionSource, customQuestions) => {
+  if (questionSource === "manual") {
+    if (!Array.isArray(customQuestions) || customQuestions.length === 0) {
+      throw new ApiError(httpStatus.BAD_REQUEST, "Manual question mode requires at least one custom question.");
+    }
+    for (const q of customQuestions) {
+      if (!q.questionText || !q.questionText.trim()) {
+        throw new ApiError(httpStatus.BAD_REQUEST, "Each custom question must have valid question text.");
+      }
+      if ((!q.type || q.type === "mcq") && (!Array.isArray(q.options) || q.options.length < 2 || !q.correctAnswer)) {
+        throw new ApiError(httpStatus.BAD_REQUEST, "Each multiple-choice question must have at least 2 options and a correct answer.");
+      }
+    }
+  }
+};
 
 const postJob = catchAsync(async (req, res) => {
   const avatarPath = req.body.applicantAvatar || null;
   const backgroundImagePath = req.body.applicantBackgroundImage || null;
 
+  validateManualQuestions(req.body.questionSource, req.body.customQuestions);
+
   const createdBy = req.user.id;
 
-  // Prepare payload for job creation
   const payload = {
     ...req.body,
     createdBy,
@@ -49,28 +65,8 @@ const getJobs = catchAsync(async (req, res) => {
 
   const options = pick(req.query, ["sortBy", "limit", "page"]);
   const result = await jobService.queryJobs(filter, options);
-  console.log("Result:", result);
   res.send(result);
 });
-
-// const saveJob = catchAsync(async (req, res) => {
-//   const job = await Job.findById(req.params.jobId);
-//   if(job.savedBy.includes(req.user.id)) {
-//     throw new ApiError(httpStatus.NOT_FOUND, 'Job already saved');
-//   }
-//   const savedJob = await Job.findByIdAndUpdate(
-//     req.params.jobId,
-//     { $push: { savedBy: req.user.id } },
-//     { new: true }
-//   );
-
-//   if (!savedJob) {
-//     throw new ApiError(httpStatus.NOT_FOUND, 'Job not found');
-//   }
-
-//   // console.log(job , 'job after saving');
-//   res.send(savedJob);
-// });
 
 const saveJob = catchAsync(async (req, res) => {
   const { jobId } = req.params;
@@ -134,7 +130,6 @@ const changeJobStatus = catchAsync(async (req, res) => {
   const { jobId } = req.params;
   const { status } = req.body;
 
-  // Validate status
   const validStatuses = ["active", "inactive", "inreview"];
   if (!validStatuses.includes(status)) {
     throw new ApiError(httpStatus.BAD_REQUEST, "Invalid status");
@@ -176,7 +171,6 @@ const deleteJobAdmin = catchAsync(async (req, res) => {
 
 const getJobById = catchAsync(async (req, res) => {
   const job = await jobService.getJobById(req.params.jobId);
-  const message = req.query.message || "";
   if (!job) {
     throw new ApiError(httpStatus.NOT_FOUND, "Job not found");
   }
@@ -235,10 +229,10 @@ const applyJob = catchAsync(async (req, res) => {
     parsedProjects: resumeAnalysis.screening?.projects,
     flaggedProjects: resumeAnalysis.screening?.flaggedProjects,
     resumeFile: resumeAnalysis.resumeFile,
-    createdBy: req.user.id, // Associate the application with the current user
+    createdBy: req.user.id,
   };
   delete payload.resumeAnalysisToken;
-  // Check if the user has already applied for the job
+
   const existingApplication = await jobService.getApplicationByJobIdAndUserId(
     req.body.applyJob.jobId,
     req.user.id,
@@ -250,10 +244,8 @@ const applyJob = catchAsync(async (req, res) => {
     });
   }
 
-  // Apply for the job
   const appliedJob = await jobService.applyJob(payload);
 
-  // Questionnaire generation is deliberately best-effort and never rolls back an application.
   try {
     const job = await Job.findById(payload.jobId).lean();
     const questionnaire = await screeningService.generateQuestionnaire(appliedJob, job);
@@ -286,11 +278,6 @@ const deleteJob = catchAsync(async (req, res) => {
     throw new ApiError(httpStatus.NOT_FOUND, "Job not found");
   }
 
-  // if (job.createdBy.toString() !== req.user.id) {
-  //   throw new ApiError(httpStatus.FORBIDDEN, 'You do not have permission to delete this job');
-  // }
-
-  // Delete the job
   await jobService.deleteJob(jobId);
 
   res.status(httpStatus.OK).send({ message: "Job deleted successfully" });
@@ -301,19 +288,16 @@ const updateJob = catchAsync(async (req, res) => {
   const job = await jobService.getJobById(jobId);
 
   if (!job) {
-    throw new ApiError(httpStatus.NOT_FOUND, "Job tidak ditemukan");
+    throw new ApiError(httpStatus.NOT_FOUND, "Job not found");
   }
 
-  // Pastikan semua id bertipe string
+  validateManualQuestions(req.body.questionSource, req.body.customQuestions);
+
   const userId = req.user.id.toString();
   let savedByArr = (job.savedBy || []).map((id) => id.toString());
 
-  if (savedByArr.includes(userId)) {
-    // Jika sudah ada, hapus userId
-    savedByArr = savedByArr.filter((id) => id !== userId);
-  } else {
-    // Jika belum ada, tambahkan userId
-    savedByArr.push(userId);
+  if (req.body.savedBy !== undefined) {
+    savedByArr = req.body.savedBy;
   }
 
   const updateData = { ...req.body, savedBy: savedByArr };
@@ -333,7 +317,6 @@ const reportJob = catchAsync(async (req, res) => {
     return res.status(httpStatus.NOT_FOUND).json({ message: "Job not found" });
   }
 
-  // Cek double report
   const existingReport = await reportService.findReport({
     userId: req.user.id,
     type: "job",
@@ -367,7 +350,7 @@ const getJobWithApplicants = catchAsync(async (req, res) => {
 
 const extendJob = catchAsync(async (req, res) => {
   const { jobId } = req.params;
-  const { type, paymentId } = req.body; // 'free' or 'paid', paymentId optional
+  const { type, paymentId } = req.body;
 
   const job = await jobService.extendJob(jobId, type, paymentId);
   res.send(job);

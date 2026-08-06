@@ -4,58 +4,21 @@ const pdfParse = require("pdf-parse");
 const mammoth = require("mammoth");
 const WordExtractor = require("word-extractor");
 const config = require("../config/config");
+const aiService = require("./aiService");
 const screeningService = require("../modules/applicant-screening/screening.service");
+const { namesMatch, validateResumeDocument } = require("../utils/resumeValidation");
+const { Application } = require("../models");
 
 const wordExtractor = new WordExtractor();
 
 const aiJsonCall = async (systemInstruction, prompt, maxOutputTokens = 2500, temperature = 0.3, userId = null, endpoint = "unknown") => {
-  if (!config.gemini.apiKey) {
-    throw new Error("Gemini API key is not configured");
-  }
-  const { logAiRequest } = require("./aiLogger.service");
-  const startTime = Date.now();
-
-  try {
-    const response = await axios.post(
-      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(config.gemini.model)}:generateContent`,
-      {
-        systemInstruction: { parts: [{ text: systemInstruction }] },
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-        generationConfig: { temperature, maxOutputTokens, responseMimeType: "application/json" },
-      },
-      { headers: { "x-goog-api-key": config.gemini.apiKey }, timeout: 20000 }
-    );
-
-    const text = response.data?.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("");
-    if (!text) throw new Error("AI returned no content");
-
-    const usage = response.data.usageMetadata || {};
-    const latencyMs = Date.now() - startTime;
-
-    logAiRequest({
-      userId,
-      endpoint,
-      model: config.gemini.model,
-      promptTokens: usage.promptTokenCount || 0,
-      completionTokens: usage.candidatesTokenCount || 0,
-      totalTokens: usage.totalTokenCount || 0,
-      latencyMs,
-      status: "success",
-    });
-
-    return JSON.parse(text);
-  } catch (error) {
-    const latencyMs = Date.now() - startTime;
-    logAiRequest({
-      userId,
-      endpoint,
-      model: config.gemini.model,
-      latencyMs,
-      status: "failed",
-      errorMessage: error.message,
-    });
-    throw error;
-  }
+  return aiService.generateJson(
+    systemInstruction,
+    prompt,
+    { maxOutputTokens, temperature },
+    userId,
+    endpoint
+  );
 };
 
 const extractResumeText = async (file) => {
@@ -94,6 +57,27 @@ const parseResume = async (resumeText, jobDescription = "", userId = null) => {
   return screeningService.parseResume(resumeText, jobDescription, userId);
 };
 
+const validateResumeAuthenticity = async (resumeText, accountName, userId = null) => {
+  validateResumeDocument({ text: resumeText, accountName });
+  if (config.aiProvider === "groq" ? !config.groq.apiKey : !config.gemini.apiKey) return true;
+
+  const result = await aiJsonCall(
+    "Classify uploaded hiring documents conservatively. Never treat a proposal, cover letter, job description, portfolio-only document, invoice, or certificate as a resume.",
+    `Review this uploaded document and return JSON only: {"is_resume":true,"candidate_name":"Full name exactly as written","reason":"brief reason"}. A resume must primarily describe one candidate's contact details, work history, education and/or skills.\n\nDocument:\n${String(resumeText).slice(0, 12000)}`,
+    500,
+    0,
+    userId,
+    "/v1/applications/validate-resume-document",
+  );
+  if (result.is_resume !== true) {
+    throw new Error(`The uploaded file is not a resume${result.reason ? `: ${result.reason}` : "."}`);
+  }
+  if (!result.candidate_name || !namesMatch(accountName, result.candidate_name)) {
+    throw new Error(`The resume candidate name does not match the signed-in account (${accountName}). Upload your own resume.`);
+  }
+  return true;
+};
+
 const scoreMatch = async (parsedResume, job, resumeText = "") => {
   const jobTitle = job.projectTitle || job.position || "";
   const reqSkills = Array.isArray(job.requiredSkills) && job.requiredSkills.length > 0
@@ -108,7 +92,7 @@ const scoreMatch = async (parsedResume, job, resumeText = "") => {
   let cooldownViolation = false;
   let evidenceSubstantiated = parsedProjects.length > 0;
 
-  if (config.gemini.apiKey) {
+  if (config.aiProvider === "groq" ? config.groq.apiKey : config.gemini.apiKey) {
     try {
       const evaluation = await aiJsonCall(
         "You are an objective AI resume screening analyst. Compare the applicant's resume facts with the job requirements.",
@@ -153,11 +137,45 @@ const scoreMatch = async (parsedResume, job, resumeText = "") => {
 };
 
 const generateScreeningTest = async (parsedResume, job, userId = null) => {
+  // Feature 1: Manual Question Source Check
+  if (job && job.questionSource === "manual") {
+    const rawCustom = (Array.isArray(job.customQuestions) && job.customQuestions.length > 0)
+      ? job.customQuestions
+      : (Array.isArray(job.test?.questions) ? job.test.questions : []);
+
+    if (rawCustom.length === 0) {
+      throw new Error("This job is set to manual question mode but has no custom questions configured.");
+    }
+
+    return rawCustom.map((q, idx) => ({
+      id: `q${idx + 1}`,
+      prompt: String(q.questionText || q.prompt || "").trim(),
+      type: q.type === "text" ? "text" : "mcq",
+      options: Array.isArray(q.options) ? q.options.map(String) : [],
+      correctAnswer: String(q.correctAnswer || q.correct_answer || "").trim(),
+      expectedSignal: "Company custom question",
+    }));
+  }
+
   const jobTitle = job.projectTitle || job.position || "Role";
   const requiredSkills = (job.requiredSkills || []).join(", ");
   const description = String(job.description || "").slice(0, 5000);
   const applicantSkills = (parsedResume?.skills || []).join(", ");
   const applicantSummary = String(parsedResume?.aboutSummary || "").slice(0, 2000);
+  const applicantProjects = JSON.stringify(parsedResume?.projects || []).slice(0, 3500);
+  const variant = require("crypto").createHash("sha256")
+    .update(`${userId || "anonymous"}:${job.id || job._id}:${applicantSummary}:${applicantProjects}`)
+    .digest("hex").slice(0, 16);
+  const previousApplications = job.id || job._id
+    ? await Application.find({ job: job.id || job._id, applicant: { $ne: userId } })
+      .select("test.questions.prompt")
+      .sort({ createdAt: -1 })
+      .limit(20)
+      .lean()
+    : [];
+  const previousPrompts = new Set(previousApplications.flatMap((application) =>
+    (application.test?.questions || []).map((question) => String(question.prompt || "").trim().toLowerCase()).filter(Boolean)));
+  const promptExclusions = [...previousPrompts].slice(0, 40);
 
   const prompt = `Create a 5-8 question screening assessment for this job applicant.
 Job Title: ${jobTitle}
@@ -165,11 +183,15 @@ Required Skills: ${requiredSkills}
 Job Description: ${description}
 Applicant Resume Summary: ${applicantSummary}
 Applicant Claimed Skills: ${applicantSkills}
+Applicant Projects: ${applicantProjects}
+Unique applicant assessment variant: ${variant}
 
 Instructions:
 Generate between 5 and 8 questions:
 1. 4 to 6 technical and scenario questions (MCQ type with 4 options each) based on the job requirements.
 2. 1 to 2 resume-probing questions (text type or MCQ) that specifically test concrete evidence for claims made in the applicant's resume. Set expectedSignal describing what a strong answer demonstrates.
+3. Make the questions specific to this applicant's projects, experience, and evidence. Do not return a stock or reusable question set. The variant must result in a distinct assessment for this applicant.
+4. Do not repeat any of these questions previously used for this job: ${JSON.stringify(promptExclusions)}
 
 Return JSON in this exact structure:
 {
@@ -194,73 +216,27 @@ Return JSON in this exact structure:
 }`;
 
   let rawQuestions = [];
-  try {
-    const result = await aiJsonCall(
-      "You are an expert technical interviewer crafting tailored pre-screening tests. Return valid JSON only.",
-      prompt,
-      3000,
-      0.5,
-      userId,
-      "/v1/applications/screening-test"
-    );
-    rawQuestions = Array.isArray(result.questions) ? result.questions : [];
-  } catch (err) {
-    console.warn("AI screening test generation fallback:", err.message);
+  let generationError;
+  for (let attempt = 0; attempt < 2 && rawQuestions.length < 5; attempt += 1) {
+    try {
+      const result = await aiJsonCall(
+        "You are an expert technical interviewer crafting original, applicant-specific pre-screening tests. Return valid JSON only.",
+        `${prompt}\nGeneration attempt variant: ${variant}-${attempt + 1}`,
+        3000,
+        0.7,
+        userId,
+        "/v1/applications/screening-test"
+      );
+      const candidateQuestions = Array.isArray(result.questions) ? result.questions : [];
+      const uniquePrompts = new Set(candidateQuestions.map((question) => String(question.prompt || "").trim().toLowerCase()).filter(Boolean));
+      const repeatsPreviousQuestion = [...uniquePrompts].some((question) => previousPrompts.has(question));
+      if (candidateQuestions.length >= 5 && uniquePrompts.size === candidateQuestions.length && !repeatsPreviousQuestion) rawQuestions = candidateQuestions;
+    } catch (err) {
+      generationError = err;
+    }
   }
-
-  if (rawQuestions.length === 0) {
-    rawQuestions = [
-      {
-        id: "q1",
-        prompt: `How many years of hands-on experience do you have with ${requiredSkills || jobTitle}?`,
-        type: "mcq",
-        options: ["Less than 1 year", "1-3 years", "3-5 years", "5+ years"],
-        correctAnswer: "3-5 years",
-        expectedSignal: "Verifies overall experience depth"
-      },
-      {
-        id: "q2",
-        prompt: `Which approach do you follow to ensure code quality and performance in ${jobTitle} projects?`,
-        type: "mcq",
-        options: [
-          "Automated unit testing, linting, and continuous integration",
-          "Manual spot checking only before deployment",
-          "Relying solely on user feedback in production",
-          "Skipping code reviews to ship faster"
-        ],
-        correctAnswer: "Automated unit testing, linting, and continuous integration",
-        expectedSignal: "Assesses engineering best practices"
-      },
-      {
-        id: "q3",
-        prompt: `Describe a challenging problem you solved in your past projects related to ${requiredSkills || jobTitle}.`,
-        type: "text",
-        options: [],
-        correctAnswer: "",
-        expectedSignal: "Substantiates practical problem-solving capability"
-      },
-      {
-        id: "q4",
-        prompt: `How do you handle strict project deadlines and shifting requirements?`,
-        type: "mcq",
-        options: [
-          "Prioritize core functionality, communicate transparently with stakeholders, and execute iteratively",
-          "Ignore changing requirements and stick strictly to initial design",
-          "Delay the deliverable indefinitely without notifying the team",
-          "Cut corners on core security and data validation"
-        ],
-        correctAnswer: "Prioritize core functionality, communicate transparently with stakeholders, and execute iteratively",
-        expectedSignal: "Evaluates agile mindset and project management"
-      },
-      {
-        id: "q5",
-        prompt: `Briefly explain the architecture of a project you built using ${applicantSkills || requiredSkills || "modern frameworks"}.`,
-        type: "text",
-        options: [],
-        correctAnswer: "",
-        expectedSignal: "Validates architecture design claims on resume"
-      }
-    ];
+  if (rawQuestions.length < 5) {
+    throw generationError || new Error("AI did not generate a valid applicant-specific assessment");
   }
 
   const questions = rawQuestions.slice(0, 8).map((q, idx) => ({
@@ -294,7 +270,7 @@ const evaluateTestAnswers = async (testQuestions, answers, userId = null) => {
   let evaluationScore = mcqScore;
   let feedback = `Answered ${mcqCorrect} out of ${mcqTotal} multiple-choice questions correctly.`;
 
-  if (config.gemini.apiKey) {
+  if (config.aiProvider === "groq" ? config.groq.apiKey : config.gemini.apiKey) {
     try {
       const prompt = `Evaluate the following test submission:
 Questions and Answers:
@@ -330,6 +306,7 @@ Return JSON: {"score": 85, "feedback": "Demonstrated strong knowledge of core pr
 module.exports = {
   extractResumeText,
   parseResume,
+  validateResumeAuthenticity,
   scoreMatch,
   generateScreeningTest,
   evaluateTestAnswers,

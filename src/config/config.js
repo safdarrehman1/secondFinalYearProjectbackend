@@ -84,6 +84,9 @@ const envVarsSchema = Joi.object()
     GEMINI_TEMPERATURE: Joi.number()
       .default(0.8)
       .description("Temperature for Gemini response"),
+    AI_PROVIDER: Joi.string().valid("gemini", "groq").default("groq"),
+    GROQ_API_KEY: Joi.string().allow("").optional().description("Groq API key"),
+    GROQ_MODEL: Joi.string().default("llama-3.3-70b-versatile"),
     // Admin configuration
     ADMIN_EMAIL: Joi.string()
       .email()
@@ -192,6 +195,11 @@ module.exports = {
     model: envVars.GEMINI_MODEL,
     maxTokens: envVars.GEMINI_MAX_TOKENS,
     temperature: envVars.GEMINI_TEMPERATURE,
+  },
+  aiProvider: envVars.AI_PROVIDER,
+  groq: {
+    apiKey: envVars.GROQ_API_KEY,
+    model: envVars.GROQ_MODEL,
   },
   admin: {
     email: envVars.ADMIN_EMAIL,

@@ -61,6 +61,20 @@ const applyToJob = catchAsync(async (req, res) => {
     throw new ApiError(httpStatus.BAD_REQUEST, "Please upload your resume file (PDF, DOC, DOCX, or TXT).");
   }
 
+  let resumeText = "";
+  try {
+    resumeText = await applicationService.extractResumeText(req.file);
+  } catch (err) {
+    throw new ApiError(httpStatus.BAD_REQUEST, err.message || "Failed to extract text from resume.");
+  }
+
+  const applicantAccount = await User.findById(applicantId).select("name").lean();
+  try {
+    await applicationService.validateResumeAuthenticity(resumeText, applicantAccount?.name, applicantId);
+  } catch (err) {
+    throw new ApiError(httpStatus.BAD_REQUEST, err.message);
+  }
+
   let resumeUrl = "";
   try {
     const s3Result = await uploadFileToS3({ ...req.file, fieldname: "resume" }, applicantId);
@@ -68,13 +82,6 @@ const applyToJob = catchAsync(async (req, res) => {
   } catch (err) {
     console.warn("S3 Upload fallback for resume:", err.message);
     resumeUrl = `/uploads/resumes/${req.file.originalname}`;
-  }
-
-  let resumeText = "";
-  try {
-    resumeText = await applicationService.extractResumeText(req.file);
-  } catch (err) {
-    throw new ApiError(httpStatus.BAD_REQUEST, err.message || "Failed to extract text from resume.");
   }
 
   let parsedResume = {};

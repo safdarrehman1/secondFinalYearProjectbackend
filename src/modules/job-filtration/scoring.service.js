@@ -57,47 +57,20 @@ const scoreMcq = (test, answers) => {
   return { score: test.questions.length ? Math.round((correct / test.questions.length) * 100) : 0, justification: `${correct}/${test.questions.length} correct` };
 };
 
+const aiService = require("../../services/aiService");
+
 const scoreTask = async (test, answers, userId = null) => {
-  if (!config.gemini.apiKey) return { score: null, justification: "Task requires manual review because AI scoring is not configured", requiresManualReview: true };
-  const { logAiRequest } = require("../../services/aiLogger.service");
-  const startTime = Date.now();
   const endpoint = "/v1/applications/score-task";
   try {
-    const response = await axios.post(
-      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(config.gemini.model)}:generateContent`,
-      {
-        contents: [{ role: "user", parts: [{ text: `Score this task submission using only the supplied rubric. Return JSON {"score":0,"justification":"short reason"}.\nTasks: ${JSON.stringify(test.questions)}\nAnswers: ${JSON.stringify(answers)}` }] }],
-        generationConfig: { temperature: 0, responseMimeType: "application/json", maxOutputTokens: 500 },
-      },
-      { headers: { "x-goog-api-key": config.gemini.apiKey }, timeout: 15000 },
-    );
-    const text = response.data?.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("");
-    const parsed = JSON.parse(text || "{}");
-    const usage = response.data.usageMetadata || {};
-    const latencyMs = Date.now() - startTime;
-
-    logAiRequest({
+    const parsed = await aiService.generateJson(
+      "Score this task submission using only the supplied rubric. Return JSON {\"score\":0,\"justification\":\"short reason\"}.",
+      `Tasks: ${JSON.stringify(test.questions)}\nAnswers: ${JSON.stringify(answers)}`,
+      { temperature: 0, maxOutputTokens: 500, timeout: 15000 },
       userId,
-      endpoint,
-      model: config.gemini.model,
-      promptTokens: usage.promptTokenCount || 0,
-      completionTokens: usage.candidatesTokenCount || 0,
-      totalTokens: usage.totalTokenCount || 0,
-      latencyMs,
-      status: "success",
-    });
-
+      endpoint
+    );
     return { score: clamp(parsed.score), justification: String(parsed.justification || "AI rubric score").slice(0, 1000), requiresManualReview: false };
   } catch (error) {
-    const latencyMs = Date.now() - startTime;
-    logAiRequest({
-      userId,
-      endpoint,
-      model: config.gemini.model,
-      latencyMs,
-      status: "failed",
-      errorMessage: error.message,
-    });
     return { score: null, justification: `Task requires manual review because automated scoring failed: ${error.message}`, requiresManualReview: true };
   }
 };

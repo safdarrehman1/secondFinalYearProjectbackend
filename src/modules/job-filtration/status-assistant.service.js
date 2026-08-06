@@ -1,65 +1,57 @@
-const axios = require("axios");
-const config = require("../../config/config");
 const Application = require("./filtration-application.model");
-const { AppliedJobs } = require("../../models");
-const { logAiRequest } = require("../../services/aiLogger.service");
+const AppliedJobs = require("../../models/appliedJobs.model");
+const aiService = require("../../services/aiService");
 
-const STATUS_TERMS = ["status", "application", "applied", "shortlist", "interview", "rejected", "hired", "test"];
-const safeStatus = (application) => ({
-  applicationId: String(application._id),
-  jobTitle: application.job?.title || "Job application",
-  jobType: application.job?.type,
-  status: application.finalStatus,
-  resumeStatus: application.resumeStatus,
-  testStatus: application.testStatus,
-  updatedAt: application.updatedAt,
-  rejectionReason: application.finalStatus === "rejected" ? application.rejectionReason : undefined,
-  improvementReport: application.finalStatus === "rejected" ? application.improvementReport : undefined,
+const STATUS_TERMS = [
+  "status", "update", "application", "test", "interview", "result",
+  "score", "screening", "job", "hired", "rejected", "shortlisted", "progress"
+];
+
+const safeStatus = (app) => ({
+  id: String(app._id || app.id),
+  jobId: String(app.job?._id || app.job?.id || app.job || ""),
+  jobTitle: app.job?.title || app.job?.projectTitle || app.job?.position || "Job Position",
+  jobType: app.job?.type || "job",
+  finalStatus: app.finalStatus || "under_review",
+  resumeStatus: app.resumeStatus || "pending",
+  resumeScore: typeof app.resumeScore === "object" ? app.resumeScore?.weighted : app.resumeScore || null,
+  testStatus: app.testStatus || "not_started",
+  testScore: app.testScore || null,
+  updatedAt: app.updatedAt || app.createdAt || new Date()
 });
 
-const legacyStatus = (application) => {
-  const statusMap = { manual_review: "under_review", test_pending: "test_unlocked", test_submitted: "test_completed", disqualified: "rejected" };
-  const score = Number(application.matchScore ?? application.resumeMatchScore ?? 0);
-  return {
-    applicationId: String(application._id),
-    jobTitle: application.jobId?.projectTitle || application.jobId?.position || application.jobId?.title || "Job application",
-    jobType: application.jobId?.type,
-    status: statusMap[application.screeningStatus] || (application.qualified ? "shortlisted" : "under_review"),
-    resumeStatus: score >= 60 ? "passed" : "failed",
-    testStatus: application.screeningStatus === "test_pending" ? "unlocked" : application.screeningStatus === "test_submitted" ? "completed" : "locked",
-    updatedAt: application.updatedAt,
-    rejectionReason: application.screeningStatus === "disqualified" ? application.disqualifiedReason : undefined,
-  };
-};
+const legacyStatus = (app) => ({
+  id: String(app._id || app.id),
+  jobId: String(app.jobId?._id || app.jobId?.id || app.jobId || ""),
+  jobTitle: app.jobId?.projectTitle || app.jobId?.position || app.jobId?.title || "Job Position",
+  jobType: "legacy_job",
+  finalStatus: app.screeningStatus || (app.qualified ? "shortlisted" : "under_review"),
+  resumeStatus: "passed",
+  resumeScore: null,
+  testStatus: app.screeningStatus || "completed",
+  testScore: app.questionnaireScore || null,
+  updatedAt: app.updatedAt || app.createdAt || new Date()
+});
 
 const localAnswer = (records) => {
-  if (!records.length) return "I could not find a matching application in your account. I can only discuss applications owned by your signed-in account.";
-  if (records.length === 1) {
-    const record = records[0];
-    return `Your application for ${record.jobTitle} is currently ${record.status.replaceAll("_", " ")}.`;
+  if (!records || records.length === 0) {
+    return "You currently have no active job applications found.";
   }
-  return `You have ${records.length} applications. Your most recently updated application is for ${records[0].jobTitle}, currently ${records[0].status.replaceAll("_", " ")}.`;
+  const latest = records[0];
+  return `Your application for "${latest.jobTitle}" is currently in "${latest.finalStatus.replace(/_/g, " ")}" status.`;
 };
 
 const geminiAnswer = async (message, records, userId) => {
-  if (!config.gemini.apiKey) return null;
-  const startedAt = Date.now();
   try {
-    const response = await axios.post(
-      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(config.gemini.model)}:generateContent`,
-      {
-        systemInstruction: { parts: [{ text: "You are SynergyHire's candidate support assistant. Answer only from the supplied candidate-owned application data. Never infer or request another user's data. If the data does not answer the question, say so. Keep the answer under 120 words." }] },
-        contents: [{ role: "user", parts: [{ text: `Question: ${message}\nCandidate-owned applications: ${JSON.stringify(records)}` }] }],
-        generationConfig: { temperature: 0.2, maxOutputTokens: 250 },
-      },
-      { headers: { "x-goog-api-key": config.gemini.apiKey }, timeout: 10000 },
+    const result = await aiService.generateContent(
+      "You are SynergyHire's candidate support assistant. Answer only from the supplied candidate-owned application data. Never infer or request another user's data. If the data does not answer the question, say so. Keep the answer under 120 words.",
+      `Question: ${message}\nCandidate-owned applications: ${JSON.stringify(records)}`,
+      { temperature: 0.2, maxOutputTokens: 250, timeout: 10000 },
+      userId,
+      "/api/assistant/status"
     );
-    const answer = response.data?.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("").trim();
-    const usage = response.data?.usageMetadata || {};
-    await logAiRequest({ userId, endpoint: "/api/assistant/status", model: config.gemini.model, promptTokens: usage.promptTokenCount || 0, completionTokens: usage.candidatesTokenCount || 0, totalTokens: usage.totalTokenCount || 0, latencyMs: Date.now() - startedAt, status: "success" });
-    return answer || null;
+    return result.text ? result.text.trim() : null;
   } catch (error) {
-    await logAiRequest({ userId, endpoint: "/api/assistant/status", model: config.gemini.model, latencyMs: Date.now() - startedAt, status: "failed", errorMessage: error.message });
     return null;
   }
 };
@@ -75,7 +67,7 @@ const answerStatusQuestion = async ({ userId, message }) => {
   const query = { candidate: userId, ...(id ? { _id: id } : {}) };
   const legacyQuery = { createdBy: userId, ...(id ? { _id: id } : {}) };
   const [applications, legacyApplications] = await Promise.all([
-    Application.find(query).populate("job", "title type").sort({ updatedAt: -1 }).limit(id ? 1 : 10),
+    Application.find(query).populate("job", "title type projectTitle position").sort({ updatedAt: -1 }).limit(id ? 1 : 10),
     AppliedJobs.find(legacyQuery).populate("jobId", "projectTitle position title type").sort({ updatedAt: -1 }).limit(id ? 1 : 10),
   ]);
   const records = [...applications.map(safeStatus), ...legacyApplications.map(legacyStatus)]
