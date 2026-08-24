@@ -76,7 +76,7 @@ const envVarsSchema = Joi.object()
     // Gemini AI configuration
     GEMINI_API_KEY: Joi.string().allow("").optional().description("Gemini API key"),
     GEMINI_MODEL: Joi.string()
-      .default("gemini-3.5-flash")
+      .default("gemini-2.5-flash")
       .description("Gemini model to use"),
     GEMINI_MAX_TOKENS: Joi.number()
       .default(4096)
@@ -86,7 +86,7 @@ const envVarsSchema = Joi.object()
       .description("Temperature for Gemini response"),
     AI_PROVIDER: Joi.string().valid("gemini", "groq").default("groq"),
     GROQ_API_KEY: Joi.string().allow("").optional().description("Groq API key"),
-    GROQ_MODEL: Joi.string().default("llama-3.3-70b-versatile"),
+    GROQ_MODEL: Joi.string().default("openai/gpt-oss-120b"),
     // Admin configuration
     ADMIN_EMAIL: Joi.string()
       .email()

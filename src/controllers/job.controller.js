@@ -12,6 +12,7 @@ const UserSpace = require("../models/userSpace.model");
 const reportService = require("../services/report.service");
 const { verifyResumeAnalysisToken } = require("./ai.controller");
 const screeningService = require("../modules/applicant-screening/screening.service");
+const { getAccountRoles, hasAccountRole } = require("../utils/accountRoles");
 
 const validateManualQuestions = (questionSource, customQuestions) => {
   if (questionSource === "manual") {
@@ -30,6 +31,9 @@ const validateManualQuestions = (questionSource, customQuestions) => {
 };
 
 const postJob = catchAsync(async (req, res) => {
+  if (!hasAccountRole(req.user, "company")) {
+    throw new ApiError(httpStatus.FORBIDDEN, "Only Company accounts can post jobs or gigs");
+  }
   const avatarPath = req.body.applicantAvatar || null;
   const backgroundImagePath = req.body.applicantBackgroundImage || null;
 
@@ -60,6 +64,10 @@ const getJobs = catchAsync(async (req, res) => {
   const filter = {
     ...likeFilter,
     ...pickFilter,
+    status: "active",
+    "orderTracking.status": {
+      $nin: ["offer_pending", "in_progress", "completed"],
+    },
     category: categoryFilter.length > 0 ? { $in: categoryFilter } : undefined,
   };
 
@@ -92,7 +100,13 @@ const getSavedJobs = catchAsync(async (req, res) => {
     Math.max(Number.parseInt(req.query.limit, 10) || 12, 1),
     50,
   );
-  const filter = { savedBy: String(req.user.id) };
+  const filter = {
+    savedBy: String(req.user.id),
+    status: "active",
+    "orderTracking.status": {
+      $nin: ["offer_pending", "in_progress", "completed"],
+    },
+  };
   const [jobs, total] = await Promise.all([
     Job.find(filter)
       .sort({ createdAt: -1 })
@@ -143,7 +157,20 @@ const getJob = catchAsync(async (req, res) => {
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 10;
 
-  const result = await jobService.getJobs(page, limit);
+  const roles = req.user ? getAccountRoles(req.user) : [];
+  const context = String(req.query.context || req.user?.activeContext || "");
+  let visibilityFilter = {};
+  if (roles.includes("company")) {
+    visibilityFilter = { createdBy: req.user.id.toString() };
+  } else if (roles.includes("employee") && roles.includes("freelancer")) {
+    if (context === "freelancer") visibilityFilter = { employmentType: "freelance-project" };
+    if (context === "employee") visibilityFilter = { employmentType: { $ne: "freelance-project" } };
+  } else if (roles.includes("freelancer")) {
+    visibilityFilter = { employmentType: "freelance-project" };
+  } else if (roles.includes("employee")) {
+    visibilityFilter = { employmentType: { $ne: "freelance-project" } };
+  }
+  const result = await jobService.getJobs(page, limit, visibilityFilter);
   res.set("Cache-Control", "public, max-age=30, stale-while-revalidate=300");
   res.send(result);
 });
@@ -181,6 +208,10 @@ const applyJob = catchAsync(async (req, res) => {
   const targetJob = await Job.findById(req.body.applyJob.jobId);
   if (!targetJob) {
     throw new ApiError(httpStatus.NOT_FOUND, "Job not found");
+  }
+  const requiredRole = targetJob.employmentType === "freelance-project" ? "freelancer" : "employee";
+  if (!hasAccountRole(req.user, requiredRole)) {
+    throw new ApiError(httpStatus.FORBIDDEN, `Only ${requiredRole} or Hybrid accounts can apply to this posting.`);
   }
   const expiryTime = targetJob.expiresAt
     ? new Date(targetJob.expiresAt).getTime()

@@ -1,16 +1,17 @@
 const axios = require('axios');
 const dns = require('dns').promises;
-const config = require('../../config/config');
 const Questionnaire = require('./questionnaire.model');
 const QuestionnaireResponse = require('./questionnaire-response.model');
 const AppliedJobs = require('../../models/appliedJobs.model');
 const aiService = require('../../services/aiService');
 
 const aiJson = async (systemInstruction, prompt, maxOutputTokens = 1800, temperature = 0.2, model = null, userId = null, endpoint = "unknown") => {
+  const options = { maxOutputTokens, temperature };
+  if (model) options.model = model;
   return aiService.generateJson(
     systemInstruction,
     prompt,
-    { maxOutputTokens, temperature, model: model || config.gemini.model },
+    options,
     userId,
     endpoint
   );
@@ -136,7 +137,7 @@ const generateQuestionnaire = async (application, job, userId = null) => {
         `Application variant: ${application._id}-${attempt + 1}\nCandidate variant: ${application.createdBy || application.candidate || userId || ''}\nJob title: ${job?.projectTitle || job?.position || ''}\nJob description: ${String(job?.description || '').slice(0, 8000)}\nApplicant resume summary: ${String(application.parsedAbout || '').slice(0, 3000)}\nApplicant skills: ${(application.parsedSkills || []).join(', ')}\nApplicant projects: ${JSON.stringify(application.parsedProjects || []).slice(0, 5000)}\nQuestions already used for this job and forbidden for this applicant: ${JSON.stringify(exclusions)}\nCreate 5 to 8 original MCQs tailored to this applicant's specific resume evidence and this job description. Return {"questions":[{"id":"q1","type":"mcq","prompt":"...","options":["..."],"correct_answer":"exact option text"}]}. Each must have exactly 4 distinct options and one unambiguous answer.`,
         2600,
         0.65,
-        config.gemini.model,
+        null,
         userId,
         "/v1/applications/generate-screening-test-mcq"
       );

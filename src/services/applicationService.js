@@ -61,14 +61,20 @@ const validateResumeAuthenticity = async (resumeText, accountName, userId = null
   validateResumeDocument({ text: resumeText, accountName });
   if (config.aiProvider === "groq" ? !config.groq.apiKey : !config.gemini.apiKey) return true;
 
-  const result = await aiJsonCall(
-    "Classify uploaded hiring documents conservatively. Never treat a proposal, cover letter, job description, portfolio-only document, invoice, or certificate as a resume.",
-    `Review this uploaded document and return JSON only: {"is_resume":true,"candidate_name":"Full name exactly as written","reason":"brief reason"}. A resume must primarily describe one candidate's contact details, work history, education and/or skills.\n\nDocument:\n${String(resumeText).slice(0, 12000)}`,
-    500,
-    0,
-    userId,
-    "/v1/applications/validate-resume-document",
-  );
+  let result;
+  try {
+    result = await aiJsonCall(
+      "Classify uploaded hiring documents conservatively. Never treat a proposal, cover letter, job description, portfolio-only document, invoice, or certificate as a resume.",
+      `Review this uploaded document and return JSON only: {"is_resume":true,"candidate_name":"Full name exactly as written","reason":"brief reason"}. A resume must primarily describe one candidate's contact details, work history, education and/or skills.\n\nDocument:\n${String(resumeText).slice(0, 12000)}`,
+      500,
+      0,
+      userId,
+      "/v1/applications/validate-resume-document",
+    );
+  } catch (error) {
+    console.warn("AI resume validation unavailable, using local validation:", error.message);
+    return true;
+  }
   if (result.is_resume !== true) {
     throw new Error(`The uploaded file is not a resume${result.reason ? `: ${result.reason}` : "."}`);
   }

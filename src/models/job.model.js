@@ -113,7 +113,7 @@ const jobSchema = mongoose.Schema(
       assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
       status: {
         type: String,
-        enum: ["not_started", "in_progress", "completed", "cancelled"],
+        enum: ["not_started", "offer_pending", "in_progress", "completed", "cancelled"],
         default: "not_started",
       },
       startedAt: Date,

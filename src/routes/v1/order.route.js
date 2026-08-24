@@ -82,6 +82,12 @@ router.put(
   orderController.declineOrder,
 );
 
+router.patch(
+  "/:orderId/negotiate",
+  auth("user", "recruiter"),
+  orderController.negotiateOrder,
+);
+
 router.post(
   "/:orderId/review",
   auth("user", "recruiter"),

@@ -14,6 +14,10 @@ const { logAiRequest } = require("../services/aiLogger.service");
 const applicationService = require("../services/applicationService");
 const aiService = require("../services/aiService");
 
+const wordExtractor = new WordExtractor();
+const MAX_RESUME_CHARACTERS = 30000;
+const MAX_LOCAL_DESCRIPTION_TERMS = 18;
+
 const generateGeminiContent = async (
   systemInstruction,
   prompt,
@@ -674,6 +678,9 @@ Use the role details to make the message specific. Do not invent employers, year
     if (typeof generated !== "string" || generated.trim().length < 20) {
       throw new Error("Invalid AI response: application message is too short");
     }
+        if (typeof generated !== "string" || generated.trim().length < 20) {
+      throw new Error("Invalid AI response: application message is too short");
+    }
     return res
       .status(httpStatus.OK)
       .json({ success: true, message: generated.trim().slice(0, 1000) });
@@ -689,16 +696,39 @@ Use the role details to make the message specific. Do not invent employers, year
 });
 
 const generateProfileAbout = catchAsync(async (req, res) => {
-  const { occupations = [], softwareTools = [], currentAbout = "" } = req.body;
+  const {
+    isCompany = false,
+    companyName = "",
+    industry = "",
+    occupations = [],
+    softwareTools = [],
+    currentAbout = "",
+  } = req.body;
+
   try {
-    const completion = await generateGeminiContent(
-      "You write authentic, distinctive, polished professional profile biographies. Avoid generic filler, clichés, and reusable stock introductions. Return valid JSON only.",
-      `Write a unique first-person About Me biography for a professional profile.
+    const isCompanyPrompt = isCompany || Boolean(companyName?.trim());
+
+    const systemPrompt = isCompanyPrompt
+      ? "You write authentic, corporate, polished company & organization overviews. Avoid generic filler and clichés. Return valid JSON only."
+      : "You write authentic, distinctive, polished professional candidate profile biographies. Avoid generic filler, clichés, and reusable stock introductions. Return valid JSON only.";
+
+    const userPrompt = isCompanyPrompt
+      ? `Write a professional company overview & mission description for an organization profile.
+Company Name: ${companyName || "Our Organization"}
+Industry / Sector: ${industry || "Technology & Services"}
+Existing notes: ${currentAbout || "None"}
+
+Create engaging, corporate prose detailing the company's background, core services, mission, and work environment. Keep it professional in 90 to 160 words. Return only JSON: {"aboutMe":"..."}`
+      : `Write a unique first-person About Me biography for a candidate profile.
 Occupations: ${occupations.join(", ") || "Not specified"}
 Software tools: ${softwareTools.join(", ") || "Not specified"}
 Existing notes: ${currentAbout || "None"}
 
-Use the supplied details to create natural, specific prose with varied sentence structure. Use only the supplied facts; do not invent employers, qualifications, awards, clients, or years of experience. Keep it warm and professional in 90 to 150 words. Return only JSON: {"aboutMe":"..."}`,
+Use the supplied details to create natural, specific prose with varied sentence structure. Use only the supplied facts; do not invent employers, qualifications, awards, clients, or years of experience. Keep it warm and professional in 90 to 150 words. Return only JSON: {"aboutMe":"..."}`;
+
+    const completion = await generateGeminiContent(
+      systemPrompt,
+      userPrompt,
       { temperature: 0.7, json: true },
       req.user?.id,
       req.originalUrl || "/api/profile-about",
@@ -756,11 +786,57 @@ Adapt the structure and wording to this specific role. Include a concise overvie
   }
 });
 
+const fillDeliveryTemplate = catchAsync(async (req, res) => {
+  const {
+    title = "",
+    category,
+    subcategory = "",
+    template,
+    contextHint = "",
+  } = req.body;
+
+  try {
+    const completion = await generateGeminiContent(
+      "You complete service-delivery templates for a freelance marketplace. Preserve the template's labels and order, replace placeholders with concise practical details, and return valid JSON only.",
+      `Complete this delivery template using only the supplied service context.
+Service title: ${title || "Not specified"}
+Category: ${category}
+Subcategory: ${subcategory || "Not specified"}
+Additional context: ${contextHint || "None"}
+
+Template:
+${template}
+
+Keep every template item on its own line. Do not invent guarantees, credentials, prices, or client-specific facts. Return only JSON: {"filledTemplate":"..."}`,
+      { temperature: 0.4, json: true },
+      req.user?.id,
+      req.originalUrl || "/api/fill-delivery-template",
+    );
+    const parsed = extractJson(completion.text);
+    const generated = parsed.filledTemplate || parsed.template || parsed.text;
+    if (typeof generated !== "string" || generated.trim().length < 10) {
+      throw new Error("Invalid AI response: filled delivery template is too short");
+    }
+    return res.status(httpStatus.OK).json({
+      success: true,
+      filledTemplate: generated.trim().slice(0, 5000),
+    });
+  } catch (error) {
+    console.error(`Delivery template AI generation failed: ${error.message}`);
+    return res.status(httpStatus.SERVICE_UNAVAILABLE).json({
+      success: false,
+      message: "AI could not fill the delivery template right now. Please try again.",
+      error: "AI_GENERATION_FAILED",
+    });
+  }
+});
+
 module.exports = {
   generateAutofill,
   generateResumeMatch,
   generateApplicationMessage,
   generateProfileAbout,
   generateJobDescription,
+  fillDeliveryTemplate,
   verifyResumeAnalysisToken,
 };

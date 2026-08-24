@@ -354,7 +354,7 @@ const ChatService = {
           deletedBy: { $ne: mongoose.Types.ObjectId(userId) },
         }).populate([
           { path: "participants", select: "name email" },
-          { path: "jobId", select: "projectTitle createdBy" },
+          { path: "jobId", select: "projectTitle createdBy employmentType position applicationFlow" },
         ]);
 
         const users = await Promise.all(
@@ -377,6 +377,18 @@ const ChatService = {
                 fullName = `${userSpace.firstName || ""} ${userSpace.lastName || ""}`.trim();
               }
             }
+
+            let applicationId = null;
+            if (chat.jobId?._id && otherUser) {
+              const appDoc = await mongoose.model("Application").findOne({
+                job: chat.jobId._id,
+                $or: [{ applicant: otherUser._id }, { applicant: userId }],
+              }).select("_id status").lean();
+              if (appDoc) {
+                applicationId = appDoc._id.toString();
+              }
+            }
+
             return {
               id: otherUser?._id,
               name: fullName ?? otherUser?.name,
@@ -384,8 +396,11 @@ const ChatService = {
               avatar: avatar ?? "",
               chatId: chat._id,
               lastMessage,
-              jobTitle: chat.jobId?.projectTitle,
+              jobTitle: chat.jobId?.projectTitle || chat.jobId?.position,
               jobId: chat.jobId?._id,
+              applicationId,
+              employmentType: chat.jobId?.employmentType || "full-time",
+              chatType: "job_application",
               inquiry: chat.inquiry || false,
             };
           }),

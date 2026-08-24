@@ -54,6 +54,39 @@ const userSchema = mongoose.Schema(
       enum: roles,
       default: "user",
     },
+    roles: {
+      type: [{ type: String, enum: ["company", "employee", "freelancer"] }],
+      default() {
+        if (this.role === "admin") return [];
+        return this.role === "recruiter"
+          ? ["company"]
+          : ["employee", "freelancer"];
+      },
+      validate: {
+        validator(value) {
+          return !value?.includes("company") || value.length === 1;
+        },
+        message: "Company accounts cannot also be Employee or Freelancer accounts",
+      },
+    },
+    activeContext: {
+      type: String,
+      enum: ["company", "employee", "freelancer"],
+      default() {
+        return this.role === "recruiter" ? "company" : "employee";
+      },
+    },
+    companyProfile: {
+      companyName: { type: String, trim: true },
+      industry: { type: String, trim: true },
+      companySize: { type: String, trim: true },
+      verificationInfo: { type: String, trim: true },
+    },
+    professionalProfile: {
+      skills: [{ type: String, trim: true }],
+      experience: { type: String, trim: true },
+      portfolioUrl: { type: String, trim: true },
+    },
     isEmailVerified: {
       type: Boolean,
       default: false,

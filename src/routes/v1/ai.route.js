@@ -79,6 +79,15 @@ router
     aiController.generateJobDescription
   );
 
+router
+  .route('/fill-delivery-template')
+  .post(
+    auth(),
+    aiAutofillLimiter,
+    validate(aiValidation.fillDeliveryTemplate),
+    aiController.fillDeliveryTemplate
+  );
+
 module.exports = router;
 
 /**

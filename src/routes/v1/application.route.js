@@ -21,6 +21,10 @@ router.get("/:applicationId", auth(), applicationController.getApplicationStatus
 router.post("/:applicationId/generate-test", auth(), applicationController.generateTest);
 router.post("/:applicationId/submit-test", auth(), applicationController.submitTestAnswers);
 router.patch("/:applicationId/status", auth(), applicationController.updateApplicationStatus);
+router.post("/:applicationId/interview", auth(), applicationController.scheduleInterview);
+router.post("/:applicationId/offer", auth(), applicationController.extendFormalOffer);
+router.post("/:applicationId/offer/decision", auth(), applicationController.decideFormalOffer);
+router.get("/:applicationId/offer-letter", auth(), applicationController.downloadOfferLetter);
 router.delete("/:applicationId", auth(), applicationController.withdrawApplication);
 
 module.exports = router;

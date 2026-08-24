@@ -7,6 +7,22 @@ const transactionService = require("./transaction.service");
 const RatingService = require("./rating.service");
 const notificationService = require("./notification.service");
 
+const releaseProjectAssignment = async (order) => {
+  if (!order.jobId) return;
+  await Job.findOneAndUpdate(
+    { _id: order.jobId, "orderTracking.orderId": order._id },
+    {
+      $set: { status: "active", "orderTracking.status": "cancelled" },
+      $unset: {
+        "orderTracking.orderId": 1,
+        "orderTracking.assignedTo": 1,
+        "orderTracking.startedAt": 1,
+        "orderTracking.completedAt": 1,
+      },
+    },
+  );
+};
+
 const createOrder = async (orderData) => {
   console.log(orderData, "data to save here");
 
@@ -288,6 +304,7 @@ const updateOrderStatus = async (
       },
     });
   }
+  if (status === "cancel") await releaseProjectAssignment(order);
   if (["revision", "disputed", "complete", "cancel"].includes(status)) {
     order.autoCompleteAt = undefined;
   }
@@ -1229,6 +1246,7 @@ module.exports = {
     }
 
     await order.save();
+    if (decision === "accepted") await releaseProjectAssignment(order);
 
     // Notification: Cancellation Decision
     try {
@@ -1481,6 +1499,7 @@ module.exports = {
     await this.processCancellationRefund(order, actorId);
 
     await order.save();
+    await releaseProjectAssignment(order);
 
     // Notification: Order Cancelled (Direct)
     try {

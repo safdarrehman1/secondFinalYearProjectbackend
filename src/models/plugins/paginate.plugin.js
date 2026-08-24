@@ -40,14 +40,32 @@ const paginate = (schema) => {
     let docsPromise = this.find(filter).sort(sort).skip(skip).limit(limit);
 
     if (options.populate) {
-      options.populate.split(',').forEach((populateOption) => {
-        docsPromise = docsPromise.populate(
-          populateOption
-            .split('.')
-            .reverse()
-            .reduce((a, b) => ({ path: b, populate: a }))
-        );
-      });
+      if (Array.isArray(options.populate)) {
+        options.populate.forEach((pop) => {
+          docsPromise = docsPromise.populate(pop);
+        });
+      } else if (typeof options.populate === 'object') {
+        docsPromise = docsPromise.populate(options.populate);
+      } else if (typeof options.populate === 'string') {
+        if (options.populate.includes(':')) {
+          const parts = options.populate.split(':');
+          const path = parts[0].trim();
+          const selectFields = parts.slice(1).join(':').replace(/,/g, ' ').trim();
+          docsPromise = docsPromise.populate({ path, select: selectFields });
+        } else {
+          options.populate.split(',').forEach((populateOption) => {
+            const p = populateOption.trim();
+            if (p) {
+              docsPromise = docsPromise.populate(
+                p
+                  .split('.')
+                  .reverse()
+                  .reduce((a, b) => ({ path: b, populate: a }))
+              );
+            }
+          });
+        }
+      }
     }
 
     docsPromise = docsPromise.exec();

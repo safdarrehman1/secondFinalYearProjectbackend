@@ -4,7 +4,8 @@ const ApiError = require("../utils/ApiError");
 const transitions = {
   pending_payment: ["active", "cancel"],
   active: ["inprogress", "accepted", "cancel"],
-  inprogress: ["accepted", "cancel"],
+  inprogress: ["negotiating", "accepted", "cancel"],
+  negotiating: ["negotiating", "accepted", "cancel"],
   accepted: ["delivered", "cancel"],
   delivered: ["revision", "complete", "disputed"],
   revision: ["delivered", "disputed"],
