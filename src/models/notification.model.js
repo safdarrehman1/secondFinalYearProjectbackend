@@ -33,6 +33,8 @@ const notificationSchema = mongoose.Schema(
         "application_status",
         "test_status",
         "interview_update",
+        "offer_extended",
+        "offer_decision",
         "message_received",
       ],
     },

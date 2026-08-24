@@ -10,8 +10,11 @@ const {
 const config = require("../config/config");
 
 const register = catchAsync(async (req, res) => {
+  const roles = req.body.roles;
   const user = await userService.createUser({
     ...req.body,
+    role: roles.includes("company") ? "recruiter" : "user",
+    activeContext: req.body.activeContext || roles[0],
     isEmailVerified: true,
   });
 

@@ -1,14 +1,13 @@
-const { version } = require('../../package.json');
 const config = require('../config/config');
 
-const swaggerDef = {
+const swaggerDefinition = {
   openapi: '3.0.0',
   info: {
-    title: 'node-express-boilerplate API documentation',
-    version,
+    title: 'Intelligent Hiring API documentation',
+    version: '1.0.0',
     license: {
       name: 'MIT',
-      url: 'https://github.com/hagopj13/node-express-boilerplate/blob/master/LICENSE',
+      url: 'https://github.com/michael-ciniawsky/postcss-load-config/blob/master/LICENSE',
     },
   },
   servers: [
@@ -18,4 +17,4 @@ const swaggerDef = {
   ],
 };
 
-module.exports = swaggerDef;
+module.exports = swaggerDefinition;

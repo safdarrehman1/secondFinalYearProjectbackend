@@ -42,6 +42,11 @@ const addSpace = {
     totalCollect: Joi.any().strip(),
     followers: Joi.any().strip(),
     country: Joi.any().strip(),
+    fullAddress: Joi.any().strip(),
+    role: Joi.any().strip(),
+    roles: Joi.any().strip(),
+    activeContext: Joi.any().strip(),
+    companyProfile: Joi.any().strip(),
   }),
 };
 
@@ -87,6 +92,11 @@ const updateSpace = {
     totalCollect: Joi.any().strip(),
     followers: Joi.any().strip(),
     country: Joi.any().strip(),
+    fullAddress: Joi.any().strip(),
+    role: Joi.any().strip(),
+    roles: Joi.any().strip(),
+    activeContext: Joi.any().strip(),
+    companyProfile: Joi.any().strip(),
   }),
 };
 

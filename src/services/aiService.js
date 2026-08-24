@@ -15,6 +15,23 @@ class AiServiceError extends Error {
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+const parseJsonResponse = (text) => {
+  const cleaned = String(text || "")
+    .replace(/```json\s*/gi, "")
+    .replace(/```\s*/g, "")
+    .trim();
+  try {
+    return JSON.parse(cleaned);
+  } catch (_) {
+    const firstBrace = cleaned.indexOf("{");
+    const lastBrace = cleaned.lastIndexOf("}");
+    if (firstBrace !== -1 && lastBrace > firstBrace) {
+      return JSON.parse(cleaned.slice(firstBrace, lastBrace + 1));
+    }
+    throw _;
+  }
+};
+
 const isRetryableError = (error) => {
   if (!error) return false;
   const status = error.response?.status || error.status;
@@ -210,7 +227,7 @@ const generateJson = async (
   );
 
   try {
-    return JSON.parse(completion.text);
+    return parseJsonResponse(completion.text);
   } catch (err) {
     throw new AiServiceError(`Failed to parse AI JSON response: ${err.message}`, {
       statusCode: 500,

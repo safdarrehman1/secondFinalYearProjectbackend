@@ -51,10 +51,21 @@ const generateJobDescription = {
   }),
 };
 
+const fillDeliveryTemplate = {
+  body: Joi.object().keys({
+    title: Joi.string().max(200).optional().allow(''),
+    category: Joi.string().min(2).max(100).required(),
+    subcategory: Joi.string().max(200).optional().allow(''),
+    template: Joi.string().min(10).max(5000).required(),
+    contextHint: Joi.string().max(2000).optional().allow(''),
+  }),
+};
+
 module.exports = {
   generateAutofill,
   generateResumeMatch,
   generateApplicationMessage,
   generateProfileAbout,
   generateJobDescription,
+  fillDeliveryTemplate,
 };

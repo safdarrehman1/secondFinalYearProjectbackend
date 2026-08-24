@@ -101,19 +101,26 @@ const queryJobs = async (filter, options) => {
   return jobs;
 };
 
-const getJobs = async (page, limit) => {
+const getJobs = async (page, limit, visibilityFilter = {}) => {
   const skip = (page - 1) * limit;
+  const listingFilter = {
+    ...visibilityFilter,
+    status: "active",
+    "orderTracking.status": {
+      $nin: ["offer_pending", "in_progress", "completed"],
+    },
+  };
 
   const [jobs, total] = await Promise.all([
-    Job.find()
+    Job.find(listingFilter)
       .select(
-        "applicantName applicantAvatar status createdOn applicantBackgroundImage budget category createdAt createdBy cultureArea description preferredLocation projectTitle timeFrame savedBy position designCategory designSubcategory jobType",
+        "applicantName applicantAvatar status createdOn applicantBackgroundImage budget category createdAt createdBy cultureArea description preferredLocation projectTitle timeFrame savedBy position designCategory designSubcategory jobType employmentType applicationFlow orderTracking",
       )
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
       .lean(),
-    Job.countDocuments(),
+    Job.countDocuments(listingFilter),
   ]);
   // Ambil semua userId unik dari createdBy
   const userIds = [...new Set(jobs.map((job) => job.createdBy))];

@@ -4,7 +4,7 @@ const regexFilter = require("../utils/regexFilter");
 const ApiError = require("../utils/ApiError");
 const catchAsync = require("../utils/catchAsync");
 const { orderService } = require("../services");
-const { Order, Job } = require("../models");
+const { Order, Job, Chat } = require("../models");
 const ChatService = require("../services/chat.service");
 const { uploadFileToS3 } = require("../utils/s3Upload");
 const stripeService = require("../services/stripe.service");
@@ -15,14 +15,138 @@ const {
 const { paypalService } = require("../services/paypal.service");
 const { notificationService } = require("../services");
 const auditService = require("../services/audit.service");
+const { hasAccountRole } = require("../utils/accountRoles");
 
 // const httpStatus = require('http-status');
 // const ApiError = require('../utils/ApiError');
 
 const createOrder = async (req, res) => {
   try {
+    if (!hasAccountRole(req.user, "company")) {
+      throw new ApiError(httpStatus.FORBIDDEN, "Only Company accounts can send project offers.");
+    }
     // Handle both direct order data and nested order data from Redux
     const orderData = req.body.order || req.body;
+
+    if (orderData.jobId) {
+      const clientId = req.user._id;
+      const job = await Job.findOneAndUpdate(
+        {
+          _id: orderData.jobId,
+          createdBy: clientId.toString(),
+          status: "active",
+          $or: [
+            { "orderTracking.status": "not_started" },
+            { "orderTracking.status": "cancelled" },
+            { "orderTracking.status": { $exists: false } },
+          ],
+        },
+        { $set: { "orderTracking.status": "offer_pending" } },
+        { new: true },
+      );
+
+      if (!job) {
+        return res.status(httpStatus.CONFLICT).send({
+          message:
+            "This project already has a pending or active assignment. Cancel it before offering the project to another freelancer.",
+        });
+      }
+
+      let projectOffer = null;
+      try {
+        const existingAssignment = await Order.findOne({
+          jobId: job._id,
+          status: {
+            $in: ["active", "inprogress", "negotiating", "accepted", "delivered", "revision", "disputed"],
+          },
+        }).select("_id");
+        if (existingAssignment) {
+          throw new ApiError(
+            httpStatus.CONFLICT,
+            "This project already has a pending or active assignment. Cancel it before creating another offer.",
+          );
+        }
+
+        const chat = orderData.freelancerId
+          ? await Chat.findOne({
+              jobId: job._id,
+              participants: { $all: [clientId, orderData.freelancerId] },
+            })
+          : orderData.chat_id
+            ? await ChatService.getChatById(orderData.chat_id)
+            : null;
+        const freelancerId = chat?.participants?.find(
+          (participant) => participant.toString() !== clientId.toString(),
+        );
+        if (!freelancerId) {
+          throw new ApiError(
+            httpStatus.BAD_REQUEST,
+            "A freelancer conversation is required to send this project offer",
+          );
+        }
+
+        projectOffer = await orderService.createOrder({
+          ...orderData,
+          title: job.projectTitle,
+          recruiterId: clientId,
+          createdBy: freelancerId,
+          status: "inprogress",
+          type: "gig_order",
+        });
+
+        await Job.updateOne(
+          { _id: job._id, "orderTracking.status": "offer_pending" },
+          {
+            $set: {
+              "orderTracking.orderId": projectOffer._id,
+              "orderTracking.assignedTo": freelancerId,
+            },
+          },
+        );
+
+        const cardData = {
+          type: "order_request",
+          orderId: projectOffer._id.toString(),
+          jobId: job._id.toString(),
+          title: projectOffer.title,
+          description: projectOffer.description,
+          price: projectOffer.price,
+          delivery_time: projectOffer.delivery_time,
+          status: projectOffer.status,
+          createdBy: freelancerId.toString(),
+          recruiterId: clientId.toString(),
+          createdAt: projectOffer.createdAt,
+        };
+        await ChatService.saveMessage(
+          clientId,
+          freelancerId,
+          `Project offer: ${projectOffer.title}`,
+          cardData,
+        );
+        projectOffer.chat_id = chat._id;
+        await projectOffer.save();
+        return res.status(httpStatus.CREATED).send(projectOffer);
+      } catch (error) {
+        if (projectOffer?._id) {
+          await Order.deleteOne({
+            _id: projectOffer._id,
+            status: { $in: ["inprogress", "negotiating"] },
+          });
+        }
+        await Job.updateOne(
+          { _id: orderData.jobId, "orderTracking.status": "offer_pending" },
+          {
+            $set: { "orderTracking.status": "not_started" },
+            $unset: {
+              "orderTracking.orderId": 1,
+              "orderTracking.assignedTo": 1,
+            },
+          },
+        );
+        throw error;
+      }
+    }
+
     orderData.createdBy = req.user._id; // Attach the user ID from the authenticated request
 
     // If order status is inprogress, create chat with cardData directly
@@ -124,7 +248,9 @@ const createOrder = async (req, res) => {
       res.status(httpStatus.CREATED).send(order);
     }
   } catch (error) {
-    res.status(httpStatus.BAD_REQUEST).send({ message: error.message });
+    res
+      .status(error.statusCode || httpStatus.BAD_REQUEST)
+      .send({ message: error.message });
   }
 };
 
@@ -146,6 +272,28 @@ const updateOrderStatus = async (req, res) => {
   try {
     const orderId = req.params.orderId;
     const { status, message } = req.body;
+    const existingOrder = await Order.findById(orderId);
+    if (!existingOrder) {
+      throw new ApiError(httpStatus.NOT_FOUND, "Order not found");
+    }
+    if (existingOrder.jobId) {
+      const participants = [
+        existingOrder.recruiterId,
+        existingOrder.createdBy,
+      ].map(String);
+      if (!participants.includes(req.user._id.toString())) {
+        throw new ApiError(
+          httpStatus.FORBIDDEN,
+          "You are not part of this project assignment",
+        );
+      }
+      if (status === "accepted") {
+        throw new ApiError(
+          httpStatus.BAD_REQUEST,
+          "Project offers must be accepted through the offer acceptance action",
+        );
+      }
+    }
     let updatedOrder;
 
     if (message != (undefined || null)) {
@@ -168,7 +316,9 @@ const updateOrderStatus = async (req, res) => {
 
     res.status(httpStatus.OK).send(updatedOrder);
   } catch (error) {
-    res.status(httpStatus.BAD_REQUEST).send({ message: error.message });
+    res
+      .status(error.statusCode || httpStatus.BAD_REQUEST)
+      .send({ message: error.message });
   }
 };
 
@@ -177,27 +327,70 @@ const acceptOrder = async (req, res) => {
   try {
     const orderId = req.params.orderId;
     const userId = req.user._id;
+    const pendingOrder = await Order.findById(orderId);
+    if (!pendingOrder) {
+      throw new ApiError(httpStatus.NOT_FOUND, "Order not found");
+    }
+    if (
+      pendingOrder.jobId &&
+      pendingOrder.createdBy.toString() !== userId.toString()
+    ) {
+      throw new ApiError(
+        httpStatus.FORBIDDEN,
+        "Only the freelancer receiving this offer can accept it",
+      );
+    }
 
-    // The order request is already in progress while awaiting a response.
-    // Persist a distinct accepted state so history and action eligibility agree.
-    const updatedOrder = await orderService.updateOrderStatus(
-      orderId,
-      "accepted",
-      "Order accepted",
-      userId,
-      "accepted",
-    );
-
-    if (updatedOrder.jobId) {
-      await Job.findByIdAndUpdate(updatedOrder.jobId, {
-        $set: {
-          status: "inactive",
-          "orderTracking.orderId": updatedOrder._id,
-          "orderTracking.assignedTo": updatedOrder.createdBy,
-          "orderTracking.status": "in_progress",
-          "orderTracking.startedAt": new Date(),
+    let reservedJob = null;
+    if (pendingOrder.jobId) {
+      reservedJob = await Job.findOneAndUpdate(
+        {
+          _id: pendingOrder.jobId,
+          status: "active",
+          "orderTracking.orderId": pendingOrder._id,
+          "orderTracking.assignedTo": userId,
+          "orderTracking.status": "offer_pending",
         },
-      });
+        {
+          $set: {
+            status: "inactive",
+            "orderTracking.status": "in_progress",
+            "orderTracking.startedAt": new Date(),
+          },
+        },
+        { new: true },
+      );
+      if (!reservedJob) {
+        throw new ApiError(
+          httpStatus.CONFLICT,
+          "This project is no longer available or is already assigned",
+        );
+      }
+    }
+
+    let updatedOrder;
+    try {
+      updatedOrder = await orderService.updateOrderStatus(
+        orderId,
+        "accepted",
+        "Project offer accepted",
+        userId,
+        "accepted",
+      );
+    } catch (error) {
+      if (reservedJob) {
+        await Job.updateOne(
+          { _id: reservedJob._id, "orderTracking.orderId": pendingOrder._id },
+          {
+            $set: {
+              status: "active",
+              "orderTracking.status": "offer_pending",
+            },
+            $unset: { "orderTracking.startedAt": 1 },
+          },
+        );
+      }
+      throw error;
     }
 
     // Send "Order Accepted" card message to chat
@@ -218,7 +411,7 @@ const acceptOrder = async (req, res) => {
     // Send to chat
     await ChatService.saveMessage(
       userId,
-      updatedOrder.createdBy,
+      updatedOrder.recruiterId,
       message,
       cardData,
     );
@@ -238,6 +431,19 @@ const declineOrder = async (req, res) => {
     const orderId = req.params.orderId;
     const userId = req.user._id;
     const { reason } = req.body;
+    const pendingOrder = await Order.findById(orderId);
+    if (!pendingOrder) {
+      throw new ApiError(httpStatus.NOT_FOUND, "Order not found");
+    }
+    if (
+      pendingOrder.jobId &&
+      pendingOrder.createdBy.toString() !== userId.toString()
+    ) {
+      throw new ApiError(
+        httpStatus.FORBIDDEN,
+        "Only the freelancer receiving this offer can decline it",
+      );
+    }
 
     // Update order status to cancel
     const updatedOrder = await orderService.updateOrderStatus(
@@ -266,7 +472,7 @@ const declineOrder = async (req, res) => {
     // Send to chat
     await ChatService.saveMessage(
       userId,
-      updatedOrder.createdBy,
+      updatedOrder.recruiterId,
       message,
       cardData,
     );
@@ -277,6 +483,90 @@ const declineOrder = async (req, res) => {
     res.status(httpStatus.OK).send(updatedOrder);
   } catch (error) {
     res.status(httpStatus.BAD_REQUEST).send({ message: error.message });
+  }
+};
+
+const negotiateOrder = async (req, res) => {
+  try {
+    const order = await Order.findById(req.params.orderId);
+    if (!order) throw new ApiError(httpStatus.NOT_FOUND, "Order not found");
+    if (!order.jobId) {
+      throw new ApiError(
+        httpStatus.BAD_REQUEST,
+        "Negotiation is available for project offers only",
+      );
+    }
+
+    const userId = req.user._id;
+    const participants = [order.recruiterId, order.createdBy].map(String);
+    if (!participants.includes(userId.toString())) {
+      throw new ApiError(httpStatus.FORBIDDEN, "You are not part of this offer");
+    }
+    if (!["inprogress", "negotiating"].includes(order.status)) {
+      throw new ApiError(
+        httpStatus.CONFLICT,
+        "Only pending project offers can be negotiated",
+      );
+    }
+
+    const price = Number(req.body.price);
+    const deliveryTime = Number(req.body.deliveryTime);
+    if (price <= 0 || !Number.isInteger(deliveryTime) || deliveryTime <= 0) {
+      throw new ApiError(
+        httpStatus.BAD_REQUEST,
+        "A valid price and delivery timeline are required",
+      );
+    }
+
+    const previousStatus = order.status;
+    order.price = price;
+    order.totalAmount = price;
+    order.delivery_time = deliveryTime;
+    order.status = "negotiating";
+    order.negotiations.push({
+      proposedBy: userId,
+      price,
+      deliveryTime,
+      message: String(req.body.message || "").trim(),
+    });
+    order.activities.push({
+      action: "counter_offer",
+      by: userId,
+      note: String(req.body.message || "Counter-offer proposed").trim(),
+      fromStatus: previousStatus,
+      toStatus: "negotiating",
+      meta: { price, deliveryTime },
+    });
+    await order.save();
+
+    const recipient =
+      order.createdBy.toString() === userId.toString()
+        ? order.recruiterId
+        : order.createdBy;
+    await ChatService.saveMessage(
+      userId,
+      recipient,
+      `Counter-offer: ${order.title}`,
+      {
+        type: "order_counter_offer",
+        orderId: order._id.toString(),
+        jobId: order.jobId.toString(),
+        title: order.title,
+        description: req.body.message || order.description,
+        price,
+        delivery_time: deliveryTime,
+        status: "negotiating",
+        createdBy: order.createdBy.toString(),
+        recruiterId: order.recruiterId.toString(),
+        createdAt: new Date(),
+      },
+    );
+
+    res.status(httpStatus.OK).send(order);
+  } catch (error) {
+    res
+      .status(error.statusCode || httpStatus.BAD_REQUEST)
+      .send({ message: error.message });
   }
 };
 
@@ -1553,6 +1843,20 @@ const adminAcceptCancellation = async (req, res) => {
     }
 
     await order.save();
+    if (order.jobId) {
+      await Job.findOneAndUpdate(
+        { _id: order.jobId, "orderTracking.orderId": order._id },
+        {
+          $set: { status: "active", "orderTracking.status": "cancelled" },
+          $unset: {
+            "orderTracking.orderId": 1,
+            "orderTracking.assignedTo": 1,
+            "orderTracking.startedAt": 1,
+            "orderTracking.completedAt": 1,
+          },
+        },
+      );
+    }
 
     // Notification: Admin Cancelled Order
     try {
@@ -2198,6 +2502,7 @@ module.exports = {
   updateOrderStatus,
   acceptOrder,
   declineOrder,
+  negotiateOrder,
   processOrderPayment,
   addReviewAndRating,
   editReview,

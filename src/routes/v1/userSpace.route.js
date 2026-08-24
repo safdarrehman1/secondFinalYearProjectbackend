@@ -10,10 +10,10 @@ const { uploadToCloudinary } = require('../../utils/cloudinaryUpload');
 const router = express.Router();
 
 router.route('/').get(auth(), validate(userSpaceValidation.getSpace), userSpaceController.getSpace);
-router.route('/add').post(auth('user'), validate(userSpaceValidation.addSpace), userSpaceController.addSpace);
-router.route('/update').patch(auth('user'), validate(userSpaceValidation.updateSpace), userSpaceController.updateSpace);
+router.route('/add').post(auth('user', 'recruiter'), validate(userSpaceValidation.addSpace), userSpaceController.addSpace);
+router.route('/update').patch(auth('user', 'recruiter'), validate(userSpaceValidation.updateSpace), userSpaceController.updateSpace);
 router.route('/upload-cover').post(
-  auth('user'),
+  auth('user', 'recruiter'),
   validate(uploadCoverValidation.uploadCover),
   async (req, res, next) => {
     try {

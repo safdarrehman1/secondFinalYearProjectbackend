@@ -104,6 +104,7 @@ const orderSchema = mongoose.Schema(
         "pending_payment",
         "active",
         "inprogress",
+        "negotiating",
         "accepted",
         "delivered",
         "revision",
@@ -325,6 +326,15 @@ const orderSchema = mongoose.Schema(
         fromStatus: { type: String },
         toStatus: { type: String },
         meta: { type: mongoose.Schema.Types.Mixed },
+      },
+    ],
+    negotiations: [
+      {
+        proposedBy: { type: ObjectId, ref: "User", required: true },
+        price: { type: Number, min: 1, required: true },
+        deliveryTime: { type: Number, min: 1, required: true },
+        message: { type: String, maxlength: 1000 },
+        proposedAt: { type: Date, default: Date.now },
       },
     ],
   },

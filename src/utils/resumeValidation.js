@@ -54,9 +54,17 @@ const sectionBody = (text, headings) => {
 const hasSectionContent = (text, headings, minimumWords) => wordCount(sectionBody(text, headings)) >= minimumWords;
 
 const validateResumeDocument = ({ text, accountName }) => {
-  const readableText = String(text || "").replace(/\s+/g, " ").trim();
+  const sourceText = String(text || "");
+  const readableText = sourceText.replace(/\s+/g, " ").trim();
   if (readableText.length < 50) {
     throw new Error("This file does not contain enough readable resume content.");
+  }
+
+  if (
+    !hasSectionContent(sourceText, SECTION_GROUPS.summary, 3) ||
+    !hasSectionContent(sourceText, SECTION_GROUPS.skills, 2)
+  ) {
+    throw new Error(STRUCTURE_ERROR);
   }
 
   const looksLikeLetter = /\b(cover letter|project proposal|business proposal|invoice|receipt)\b/i.test(readableText);
@@ -70,8 +78,8 @@ const validateResumeDocument = ({ text, accountName }) => {
     if (nameParts.length > 0) {
       const header = ` ${normalize(readableText.slice(0, 3000))} `;
       const fullNameMatches = header.includes(` ${normalizedName} `);
-      const namePartMatches = nameParts.some((part) => header.includes(` ${part} `));
-      if (!fullNameMatches && !namePartMatches) {
+      const allNamePartsMatch = nameParts.every((part) => header.includes(` ${part} `));
+      if (!fullNameMatches && !allNamePartsMatch) {
         throw new Error(`The resume candidate name does not match the signed-in account (${accountName}). Upload your own resume.`);
       }
     }

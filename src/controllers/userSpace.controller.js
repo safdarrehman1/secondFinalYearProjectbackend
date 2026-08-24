@@ -122,13 +122,19 @@ const getSpace = catchAsync(async (req, res) => {
   result.country = result.address ? result.address.split(",")[0] : "";
   result.totalCollect = 0;
 
-  // Followers: real count + virtual (1–2 added per user per day by cron)
+  // Followers & Role Metadata: real count + virtual
   const [followersCount, userDoc] = await Promise.all([
     User.countDocuments({ following: userId }),
-    User.findById(userId).select("virtualFollowers").lean(),
+    User.findById(userId).select("virtualFollowers role roles activeContext companyProfile").lean(),
   ]);
   const virtualFollowers = (userDoc && userDoc.virtualFollowers) || 0;
   result.followers = followersCount + virtualFollowers;
+  if (userDoc) {
+    result.role = result.role || userDoc.role;
+    result.roles = result.roles || userDoc.roles;
+    result.activeContext = result.activeContext || userDoc.activeContext;
+    result.companyProfile = result.companyProfile || userDoc.companyProfile;
+  }
 
   // Calculate order metrics using RatingService
   const Order = require("../models/order.model");

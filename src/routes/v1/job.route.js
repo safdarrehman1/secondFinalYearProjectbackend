@@ -92,7 +92,7 @@ router.post(
 );
 
 // router.get('/' ,validate(jobValidation.getJobs), jobController.getJob);
-router.get("/", jobController.getJob);
+router.get("/", auth.optionalAuth(), jobController.getJob);
 router.get(
   "/:jobId",
   auth(),
