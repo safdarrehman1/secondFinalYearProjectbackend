@@ -2437,8 +2437,7 @@ const editReview = async (req, res) => {
       .send({ message: error.message });
   }
 };
-
-const reportReview = async (req, res) => {
+const reportReview = async (req, res) => {
   try {
     const reason = String(req.body.reason || "").trim();
     if (reason.length < 10 || reason.length > 500) {
@@ -2496,6 +2495,47 @@ const moderateReview = async (req, res) => {
   }
 };
 
+const getOrdersAdmin = catchAsync(async (req, res) => {
+  const orders = await Order.find({})
+    .populate("buyer", "name email profilePicture")
+    .populate("seller", "name email profilePicture")
+    .populate("recruiterId", "name email profilePicture")
+    .populate("createdBy", "name email profilePicture")
+    .populate("gig", "title category subcategory")
+    .populate("jobId", "projectTitle position")
+    .sort({ createdAt: -1 })
+    .lean();
+  res.status(httpStatus.OK).json({ success: true, data: orders });
+});
+
+const updateOrderStatusAdmin = catchAsync(async (req, res) => {
+  const { status, paymentStatus } = req.body;
+  const updateData = {};
+  if (status) {
+    updateData.status = status;
+    updateData.orderStatus = status;
+  }
+  if (paymentStatus) updateData.paymentStatus = paymentStatus;
+
+  const order = await Order.findByIdAndUpdate(
+    req.params.orderId,
+    updateData,
+    { new: true, runValidators: true }
+  )
+    .populate("buyer", "name email")
+    .populate("seller", "name email")
+    .populate("recruiterId", "name email")
+    .populate("createdBy", "name email");
+  if (!order) throw new ApiError(httpStatus.NOT_FOUND, "Order not found");
+  res.status(httpStatus.OK).json({ success: true, data: order });
+});
+
+const deleteOrderAdmin = catchAsync(async (req, res) => {
+  const order = await Order.findByIdAndDelete(req.params.orderId);
+  if (!order) throw new ApiError(httpStatus.NOT_FOUND, "Order not found");
+  res.status(httpStatus.OK).json({ success: true, message: "Order deleted successfully" });
+});
+
 module.exports = {
   createOrder,
   getOrder,
@@ -2536,4 +2576,7 @@ module.exports = {
   payExtraPayment,
   createExtraPaymentPaypalOrder,
   manageMilestone,
+  getOrdersAdmin,
+  updateOrderStatusAdmin,
+  deleteOrderAdmin,
 };

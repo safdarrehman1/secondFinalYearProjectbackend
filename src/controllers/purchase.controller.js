@@ -377,6 +377,26 @@ const createSponsorship = catchAsync(async (req, res) => {
   });
 });
 
+const getPurchasesAdmin = catchAsync(async (req, res) => {
+  const purchases = await Purchase.find({})
+    .populate("userId", "name email profilePicture")
+    .populate("creatorId", "name email profilePicture")
+    .sort({ createdAt: -1 })
+    .lean();
+  res.status(httpStatus.OK).json({ success: true, data: purchases });
+});
+
+const updatePurchaseStatusAdmin = catchAsync(async (req, res) => {
+  const { status } = req.body;
+  const purchase = await Purchase.findByIdAndUpdate(
+    req.params.purchaseId,
+    { status },
+    { new: true, runValidators: true }
+  ).populate("userId", "name email").populate("creatorId", "name email");
+  if (!purchase) throw new ApiError(httpStatus.NOT_FOUND, "Purchase record not found");
+  res.status(httpStatus.OK).json({ success: true, data: purchase });
+});
+
 module.exports = {
   createGigOrder,
   createStripeGigOrder,
@@ -384,4 +404,6 @@ module.exports = {
   getPurchaseHistory,
   getPurchaseDetails,
   getSalesData,
+  getPurchasesAdmin,
+  updatePurchaseStatusAdmin,
 };

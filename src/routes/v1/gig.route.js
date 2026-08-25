@@ -41,6 +41,16 @@ router.route('/featured')
 router.route('/popular')
   .get(optionalAuth(), validate(gigValidation.getGigs), gigController.getPopularGigs);
 
+// Admin routes
+router.route('/admin/all')
+  .get(auth('admin'), gigController.getGigsAdmin);
+
+router.route('/admin/:gigId/status')
+  .patch(auth('admin'), gigController.updateGigStatusAdmin);
+
+router.route('/admin/:gigId')
+  .delete(auth('admin'), gigController.deleteGigAdmin);
+
 // Public gig listing and details
 router.route('/')
   .post(auth(), createLimiter, validate(gigValidation.createGig), gigController.createGig)

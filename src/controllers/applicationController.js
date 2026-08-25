@@ -604,6 +604,12 @@ const updateApplicationStatusAdmin = catchAsync(async (req, res) => {
   return res.status(httpStatus.OK).json({ success: true, data: application });
 });
 
+const deleteApplicationAdmin = catchAsync(async (req, res) => {
+  const application = await Application.findByIdAndDelete(req.params.applicationId);
+  if (!application) throw new ApiError(httpStatus.NOT_FOUND, "Application not found");
+  return res.status(httpStatus.OK).json({ success: true, message: "Application deleted successfully" });
+});
+
 module.exports = {
   applyToJob,
   getApplicationStatus,
@@ -615,6 +621,7 @@ module.exports = {
   getMyApplications,
   getApplicationsAdmin,
   updateApplicationStatusAdmin,
+  deleteApplicationAdmin,
   scheduleInterview,
   extendFormalOffer,
   decideFormalOffer,

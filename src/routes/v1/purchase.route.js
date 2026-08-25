@@ -16,6 +16,10 @@ const downloadLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+// Admin routes
+router.get("/admin/all", auth("admin"), purchaseController.getPurchasesAdmin);
+router.patch("/admin/:purchaseId/status", auth("admin"), purchaseController.updatePurchaseStatusAdmin);
+
 // Purchase History Routes
 router.post("/sponsor", auth(), purchaseController.createSponsorship);
 

@@ -24,6 +24,16 @@ router.route('/classification/:classification')
 router.route('/user/:userId')
     .get(optionalAuth(), validate(blogValidation.getBlogsByUser), blogController.getBlogsByUser);
 
+// Admin routes
+router.route('/admin/all')
+    .get(auth('admin'), blogController.getBlogsAdmin);
+
+router.route('/admin/:blogId/status')
+    .patch(auth('admin'), blogController.updateBlogStatusAdmin);
+
+router.route('/admin/:blogId')
+    .delete(auth('admin'), blogController.deleteBlogAdmin);
+
 router.route('/:blogId')
     .get(optionalAuth(), validate(blogValidation.getBlog), blogController.getBlog)
     .put(auth(), upload.fields([{ name: 'coverImage', maxCount: 1 }]), validate(blogValidation.updateBlog), blogController.updateBlog)

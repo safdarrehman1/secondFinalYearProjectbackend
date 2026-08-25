@@ -39,8 +39,16 @@ const replyToContact = async (req, res) => {
   return res.status(httpStatus.OK).json(contact);
 };
 
+const deleteContact = async (req, res) => {
+  if (!req.user || req.user.role !== 'admin') return res.status(httpStatus.FORBIDDEN).json({ message: 'Forbidden: Admins only' });
+  const contact = await ContactUs.findByIdAndDelete(req.params.contactId);
+  if (!contact) return res.status(httpStatus.NOT_FOUND).json({ message: 'Support request not found.' });
+  return res.status(httpStatus.OK).json({ success: true, message: 'Support request deleted successfully' });
+};
+
 module.exports = {
   getAllContactUs,
   updateContactStatus,
   replyToContact,
+  deleteContact,
 };
