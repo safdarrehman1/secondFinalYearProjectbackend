@@ -6,12 +6,12 @@ const generateAutofill = {
       'string.empty': 'Title is required',
       'string.min': 'Title must be at least 3 characters',
       'string.max': 'Title cannot exceed 200 characters',
-      'any.required': 'Title is required (minimum 3 characters)'
+      'any.required': 'Title is required (minimum 3 characters)',
     }),
     category: Joi.string().max(100).optional().allow(''),
     subcategory: Joi.string().max(100).optional().allow(''),
     workImages: Joi.array().items(Joi.string().uri()).max(10).optional(),
-    contextHint: Joi.string().optional().allow('') // Removed max length requirement
+    contextHint: Joi.string().optional().allow(''),
   }),
 };
 
@@ -37,8 +37,11 @@ const generateApplicationMessage = {
 
 const generateProfileAbout = {
   body: Joi.object().keys({
-    occupations: Joi.array().items(Joi.string()).max(10).default([]),
-    softwareTools: Joi.array().items(Joi.string()).max(10).default([]),
+    isCompany: Joi.boolean().optional().default(false),
+    companyName: Joi.string().max(200).optional().allow(''),
+    industry: Joi.string().max(200).optional().allow(''),
+    occupations: Joi.array().items(Joi.string()).max(20).default([]),
+    softwareTools: Joi.array().items(Joi.string()).max(20).default([]),
     currentAbout: Joi.string().max(3000).optional().allow(''),
   }),
 };

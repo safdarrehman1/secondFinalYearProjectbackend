@@ -7,6 +7,7 @@ const router = express.Router();
 
 router.get("/admin/all", auth("admin"), applicationController.getApplicationsAdmin);
 router.patch("/admin/:applicationId/status", auth("admin"), applicationController.updateApplicationStatusAdmin);
+router.delete("/admin/:applicationId", auth("admin"), applicationController.deleteApplicationAdmin);
 
 router.post(
   "/apply/:jobId",

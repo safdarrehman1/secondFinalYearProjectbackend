@@ -1,4 +1,5 @@
 const httpStatus = require("http-status");
+const mongoose = require("mongoose");
 const pick = require("../utils/pick");
 const regexFilter = require("../utils/regexFilter");
 const ApiError = require("../utils/ApiError");
@@ -177,7 +178,31 @@ const getJob = catchAsync(async (req, res) => {
 
 const getJobsAdmin = catchAsync(async (req, res) => {
   const jobs = await Job.find({}).sort({ createdAt: -1 }).lean();
-  res.status(httpStatus.OK).send({ success: true, data: jobs });
+  const userIds = jobs
+    .map((j) => j.createdBy)
+    .filter((id) => id && mongoose.Types.ObjectId.isValid(id));
+  
+  let userMap = {};
+  if (userIds.length > 0) {
+    const users = await User.find({ _id: { $in: userIds } })
+      .select("name email profilePicture companyName role")
+      .lean();
+    userMap = users.reduce((acc, u) => {
+      acc[u._id.toString()] = u;
+      return acc;
+    }, {});
+  }
+
+  const enhancedJobs = jobs.map((j) => {
+    const owner = (j.createdBy && userMap[j.createdBy.toString()]) || null;
+    return {
+      ...j,
+      owner,
+      createdBy: owner || j.createdBy,
+    };
+  });
+
+  res.status(httpStatus.OK).send({ success: true, data: enhancedJobs });
 });
 
 const changeJobStatusAdmin = catchAsync(async (req, res) => {
@@ -213,21 +238,16 @@ const applyJob = catchAsync(async (req, res) => {
   if (!hasAccountRole(req.user, requiredRole)) {
     throw new ApiError(httpStatus.FORBIDDEN, `Only ${requiredRole} or Hybrid accounts can apply to this posting.`);
   }
-  const expiryTime = targetJob.expiresAt
-    ? new Date(targetJob.expiresAt).getTime()
-    : targetJob.createdAt && targetJob.activePeriod
-      ? new Date(targetJob.createdAt).getTime() +
-        targetJob.activePeriod * 24 * 60 * 60 * 1000
-      : null;
-  const hasStartedOrEnded =
-    targetJob.orderTracking &&
-    targetJob.orderTracking.status !== "not_started";
+  const isAssigned = Boolean(
+    targetJob.isAssigned ||
+      targetJob.assignedTo ||
+      (targetJob.orderTracking &&
+        ["in_progress", "completed", "disputed"].includes(
+          targetJob.orderTracking.status,
+        )),
+  );
 
-  if (
-    targetJob.status !== "active" ||
-    hasStartedOrEnded ||
-    (expiryTime && Date.now() >= expiryTime)
-  ) {
+  if (targetJob.status !== "active" || isAssigned) {
     throw new ApiError(
       httpStatus.BAD_REQUEST,
       "This job is no longer accepting applications.",

@@ -1,11 +1,12 @@
-const httpStatus = require('http-status');
-const pick = require('../utils/pick');
-const ApiError = require('../utils/ApiError');
-const catchAsync = require('../utils/catchAsync');
-const { blogService, userSpaceService, userService } = require('../services');
-const { uploadFileToS3 } = require('../utils/s3Upload');
-const slugify = require('../utils/slugify');
-const { createBlogReport } = require('./report.controller');
+const httpStatus = require("http-status");
+const pick = require("../utils/pick");
+const ApiError = require("../utils/ApiError");
+const catchAsync = require("../utils/catchAsync");
+const { blogService, userSpaceService, userService } = require("../services");
+const { uploadFileToS3 } = require("../utils/s3Upload");
+const slugify = require("../utils/slugify");
+const { createBlogReport } = require("./report.controller");
+const Blog = require("../models/blog.model");
 
 const createBlog = catchAsync(async (req, res) => {
   const userId = req.user.id;
@@ -13,13 +14,16 @@ const createBlog = catchAsync(async (req, res) => {
 
   // Check if required files are uploaded
   if (!files || !files.coverImage) {
-    throw new ApiError(httpStatus.BAD_REQUEST, 'Cover image is required');
+    throw new ApiError(httpStatus.BAD_REQUEST, "Cover image is required");
   }
 
   // Get user space to retrieve firstName and lastName
   const userSpace = await userSpaceService.getSpace(userId);
   if (!userSpace) {
-    throw new ApiError(httpStatus.NOT_FOUND, 'User space not found. Please complete your profile first.');
+    throw new ApiError(
+      httpStatus.NOT_FOUND,
+      "User space not found. Please complete your profile first.",
+    );
   }
 
   // Create userName from userSpace firstName and lastName
@@ -27,13 +31,13 @@ const createBlog = catchAsync(async (req, res) => {
 
   // Parse classification if it's a string (from multipart form data)
   let classification = req.body.classification;
-  if (classification && typeof classification === 'string') {
+  if (classification && typeof classification === "string") {
     try {
       classification = JSON.parse(classification);
     } catch (error) {
       // If parsing fails, split by comma or treat as single value
-      if (classification.includes(',')) {
-        classification = classification.split(',').map(item => item.trim());
+      if (classification.includes(",")) {
+        classification = classification.split(",").map((item) => item.trim());
       } else {
         classification = [classification];
       }
@@ -66,27 +70,30 @@ const createBlog = catchAsync(async (req, res) => {
 });
 
 const getBlogs = catchAsync(async (req, res) => {
-  const filter = pick(req.query, ['title', 'classification', 'userName']);
-  const options = pick(req.query, ['sortBy', 'limit', 'page']);
-  
+  const filter = pick(req.query, ["title", "classification", "userName"]);
+  const options = pick(req.query, ["sortBy", "limit", "page"]);
+
   // Add default sorting by creation date (newest first)
   if (!options.sortBy) {
-    options.sortBy = 'createdAt:desc';
+    options.sortBy = "createdAt:desc";
   }
 
   // Only show active blogs
   filter.isActive = true;
 
   // Add populate options (plugin expects string format)
-  options.populate = 'createdBy,comments.user';
+  options.populate = "createdBy,comments.user";
 
-  const result = await blogService.queryBlogsWithEnhancedComments(filter, options);
-  
+  const result = await blogService.queryBlogsWithEnhancedComments(
+    filter,
+    options,
+  );
+
   // Add isLiked field for authenticated users
   if (req.user) {
-    result.results = result.results.map(blog => {
+    result.results = result.results.map((blog) => {
       // blog is already an object from queryBlogsWithEnhancedComments
-      blog.isLiked = blog.likes.some(like => like.toString() === req.user.id);
+      blog.isLiked = blog.likes.some((like) => like.toString() === req.user.id);
       return blog;
     });
   }
@@ -110,25 +117,29 @@ const getBlog = catchAsync(async (req, res) => {
     // Asumsikan slug
     blog = await blogService.getBlogBySlug(req.params.blogId, req.user?.id);
   }
-  
+
   // Increment view count if user is authenticated and hasn't viewed before
   if (req.user) {
-    const viewResult = await blogService.incrementViewCount(req.params.blogId, req.user.id);
+    const viewResult = await blogService.incrementViewCount(
+      req.params.blogId,
+      req.user.id,
+    );
     // Add view information to response
     blog.viewInfo = {
       hasViewedBefore: viewResult.hasViewed,
-      currentViewCount: viewResult.newViewCount
+      currentViewCount: viewResult.newViewCount,
     };
 
     // Check if current user is following the blog creator
     const currentUser = await userService.getUserById(req.user.id);
-    blog.isFollowing = currentUser.following.some(followedUserId => 
-      followedUserId.toString() === blog.createdBy._id.toString()
+    blog.isFollowing = currentUser.following.some(
+      (followedUserId) =>
+        followedUserId.toString() === blog.createdBy._id.toString(),
     );
   } else {
     blog.isFollowing = false;
   }
-  
+
   res.send(blog);
 });
 
@@ -137,13 +148,18 @@ const updateBlog = catchAsync(async (req, res) => {
   const updateData = { ...req.body };
 
   // Parse classification if it's a string (from multipart form data)
-  if (updateData.classification && typeof updateData.classification === 'string') {
+  if (
+    updateData.classification &&
+    typeof updateData.classification === "string"
+  ) {
     try {
       updateData.classification = JSON.parse(updateData.classification);
     } catch (error) {
       // If parsing fails, split by comma or treat as single value
-      if (updateData.classification.includes(',')) {
-        updateData.classification = updateData.classification.split(',').map(item => item.trim());
+      if (updateData.classification.includes(",")) {
+        updateData.classification = updateData.classification
+          .split(",")
+          .map((item) => item.trim());
       } else {
         updateData.classification = [updateData.classification];
       }
@@ -160,7 +176,11 @@ const updateBlog = catchAsync(async (req, res) => {
     }
   }
 
-  const blog = await blogService.updateBlogById(req.params.blogId, updateData, req.user.id);
+  const blog = await blogService.updateBlogById(
+    req.params.blogId,
+    updateData,
+    req.user.id,
+  );
   res.send(blog);
 });
 
@@ -170,36 +190,51 @@ const deleteBlog = catchAsync(async (req, res) => {
 });
 
 const likeBlog = catchAsync(async (req, res) => {
-  const result = await blogService.toggleLikeBlog(req.params.blogId, req.user.id);
+  const result = await blogService.toggleLikeBlog(
+    req.params.blogId,
+    req.user.id,
+  );
   res.send(result);
 });
 
 const commentOnBlog = catchAsync(async (req, res) => {
-  const blog = await blogService.addCommentToBlog(req.params.blogId, req.user.id, req.body.comment);
+  const blog = await blogService.addCommentToBlog(
+    req.params.blogId,
+    req.user.id,
+    req.body.comment,
+  );
   res.send(blog);
 });
 
 const deleteComment = catchAsync(async (req, res) => {
-  const blog = await blogService.deleteCommentFromBlog(req.params.blogId, req.params.commentId, req.user.id);
+  const blog = await blogService.deleteCommentFromBlog(
+    req.params.blogId,
+    req.params.commentId,
+    req.user.id,
+  );
   res.send(blog);
 });
 
 const getBlogsByUser = catchAsync(async (req, res) => {
   const filter = {};
-  const options = pick(req.query, ['sortBy', 'limit', 'page']);
-  
+  const options = pick(req.query, ["sortBy", "limit", "page"]);
+
   // Add default sorting
   if (!options.sortBy) {
-    options.sortBy = 'createdAt:desc';
+    options.sortBy = "createdAt:desc";
   }
 
-  const result = await blogService.getBlogsByUserId(req.params.userId, filter, options);
-  
+  const result = await blogService.getBlogsByUserId(
+    req.params.userId,
+    filter,
+    options,
+  );
+
   // Add isLiked field for authenticated users
   if (req.user) {
-    result.results = result.results.map(blog => {
+    result.results = result.results.map((blog) => {
       // blog is already an object from getBlogsByUserId enhanced function
-      blog.isLiked = blog.likes.some(like => like.toString() === req.user.id);
+      blog.isLiked = blog.likes.some((like) => like.toString() === req.user.id);
       return blog;
     });
   }
@@ -209,34 +244,40 @@ const getBlogsByUser = catchAsync(async (req, res) => {
 
 const getMyBlogs = catchAsync(async (req, res) => {
   const filter = {};
-  const options = pick(req.query, ['sortBy', 'limit', 'page']);
-  
+  const options = pick(req.query, ["sortBy", "limit", "page"]);
+
   // Add default sorting
   if (!options.sortBy) {
-    options.sortBy = 'createdAt:desc';
+    options.sortBy = "createdAt:desc";
   }
 
-  const result = await blogService.getBlogsByUserId(req.user.id, filter, options);
+  const result = await blogService.getBlogsByUserId(
+    req.user.id,
+    filter,
+    options,
+  );
   res.send(result);
 });
-
 
 const getTrendingBlogs = catchAsync(async (req, res) => {
   const filter = { isActive: true };
   const options = {
-    sortBy: 'likesCount:desc,createdAt:desc',
+    sortBy: "likesCount:desc,createdAt:desc",
     limit: parseInt(req.query.limit) || 20,
     page: parseInt(req.query.page) || 1,
-    populate: 'createdBy,comments.user'
+    populate: "createdBy,comments.user",
   };
 
-  const result = await blogService.queryBlogsWithEnhancedComments(filter, options);
-  
+  const result = await blogService.queryBlogsWithEnhancedComments(
+    filter,
+    options,
+  );
+
   // Add isLiked field for authenticated users
   if (req.user) {
-    result.results = result.results.map(blog => {
+    result.results = result.results.map((blog) => {
       // blog is already an object from queryBlogsWithEnhancedComments
-      blog.isLiked = blog.likes.some(like => like.toString() === req.user.id);
+      blog.isLiked = blog.likes.some((like) => like.toString() === req.user.id);
       return blog;
     });
   }
@@ -245,32 +286,68 @@ const getTrendingBlogs = catchAsync(async (req, res) => {
 });
 
 const getBlogsByClassification = catchAsync(async (req, res) => {
-  const filter = { 
+  const filter = {
     classification: req.params.classification,
-    isActive: true 
+    isActive: true,
   };
-  const options = pick(req.query, ['sortBy', 'limit', 'page']);
-  
+  const options = pick(req.query, ["sortBy", "limit", "page"]);
+
   // Add default sorting
   if (!options.sortBy) {
-    options.sortBy = 'createdAt:desc';
+    options.sortBy = "createdAt:desc";
   }
 
   // Add populate options (plugin expects string format)
-  options.populate = 'createdBy,comments.user';
+  options.populate = "createdBy,comments.user";
 
-  const result = await blogService.queryBlogsWithEnhancedComments(filter, options);
-  
-  // Add isLiked field for authenticated users
+  const result = await blogService.queryBlogsWithEnhancedComments(
+    filter,
+    options,
+  );
+
   if (req.user) {
-    result.results = result.results.map(blog => {
-      // blog is already an object from queryBlogsWithEnhancedComments
-      blog.isLiked = blog.likes.some(like => like.toString() === req.user.id);
+    result.results = result.results.map((blog) => {
+      blog.isLiked = blog.likes.some((like) => like.toString() === req.user.id);
       return blog;
     });
   }
 
   res.send(result);
+});
+
+const getBlogsAdmin = catchAsync(async (req, res) => {
+  const blogs = await Blog.find({})
+    .populate("createdBy", "name email profilePicture")
+    .sort({ createdAt: -1 })
+    .lean();
+  res.status(httpStatus.OK).json({ success: true, data: blogs });
+});
+
+const updateBlogStatusAdmin = catchAsync(async (req, res) => {
+  const { status, isActive } = req.body;
+  const updateData = {};
+  if (status) {
+    const valid = ["draft", "published", "archived"];
+    if (!valid.includes(status))
+      throw new ApiError(httpStatus.BAD_REQUEST, "Invalid blog status");
+    updateData.status = status;
+  }
+  if (isActive !== undefined) updateData.isActive = Boolean(isActive);
+
+  const blog = await Blog.findByIdAndUpdate(req.params.blogId, updateData, {
+    new: true,
+    runValidators: true,
+  }).populate("createdBy", "name email profilePicture");
+  if (!blog) throw new ApiError(httpStatus.NOT_FOUND, "Blog not found");
+  res.status(httpStatus.OK).json({ success: true, data: blog });
+});
+
+const deleteBlogAdmin = catchAsync(async (req, res) => {
+  const blog = await Blog.findByIdAndDelete(req.params.blogId);
+  if (!blog) throw new ApiError(httpStatus.NOT_FOUND, "Blog not found");
+  res
+    .status(httpStatus.OK)
+    .json({ success: true, message: "Blog deleted successfully" });
 });
 
 module.exports = {
@@ -288,4 +365,7 @@ module.exports = {
   getTrendingBlogs,
   getBlogsByClassification,
   reportBlog: createBlogReport,
+  getBlogsAdmin,
+  updateBlogStatusAdmin,
+  deleteBlogAdmin,
 };

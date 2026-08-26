@@ -91,6 +91,52 @@ const seededShuffle = (items, seedText) => {
   return shuffled;
 };
 
+const isGibberish = (text) => {
+  if (!text || typeof text !== 'string') return true;
+  const trimmed = text.trim();
+  if (trimmed.length < 5) return true;
+  // Check for repeated character sequences like aaaaa or asdfasdf
+  if (/(.)\1{4,}/i.test(trimmed)) return true;
+  // Check for lack of vowels in words longer than 4 chars
+  const words = trimmed.split(/\s+/);
+  const meaninglessWords = words.filter((w) => w.length > 5 && !/[aeiouy]/i.test(w));
+  if (meaninglessWords.length > 0 && meaninglessWords.length === words.length) return true;
+  // Check keyboard mash patterns
+  if (/^[asdfghjklqwertyuiopzxcvbnm;.,/\\]{10,}$/i.test(trimmed) && !trimmed.includes(' ')) return true;
+  return false;
+};
+
+const evaluateTextAnswer = async (prompt, candidateAnswer, correctAnswer = '', userId = null) => {
+  if (isGibberish(candidateAnswer)) {
+    return 0;
+  }
+
+  try {
+    const evaluation = await aiJson(
+      'You are a rigorous technical assessment evaluator. Grade the candidate answer objectively on technical correctness, conceptual clarity, and relevance. If the answer is gibberish, keyboard smashing, nonsense, or completely wrong, give a score of 0. Return JSON only.',
+      `Question: ${prompt}\n${correctAnswer ? `Expected benchmark / correct concept: ${correctAnswer}\n` : ''}Candidate Response: ${candidateAnswer}\n\nEvaluate the response. Return exact JSON:\n{"score": <number between 0 and 100>, "is_valid": <boolean>, "rationale": "<brief 1-sentence explanation>"}`,
+      400,
+      0.1,
+      null,
+      userId,
+      '/v1/applications/evaluate-answer'
+    );
+
+    const score = Number(evaluation?.score);
+    if (!isNaN(score) && score >= 0 && score <= 100) {
+      return Math.round(score);
+    }
+    return evaluation?.is_valid ? 70 : 0;
+  } catch (err) {
+    console.warn(`AI answer evaluation fallback: ${err.message}`);
+    // If AI evaluation is temporarily unavailable, ensure basic heuristic grading:
+    if (correctAnswer && correctAnswer.trim()) {
+      return candidateAnswer.toLowerCase().includes(correctAnswer.toLowerCase().trim()) ? 80 : 20;
+    }
+    return candidateAnswer.trim().split(/\s+/).length >= 8 ? 60 : 0;
+  }
+};
+
 const generateQuestionnaire = async (application, job, userId = null) => {
   let questions = [];
 
@@ -107,77 +153,68 @@ const generateQuestionnaire = async (application, job, userId = null) => {
         options: Array.isArray(q.options) ? q.options.map(String).map((o) => o.trim()).filter(Boolean) : [],
         correctAnswer: String(q.correctAnswer || q.correct_answer || '').trim(),
       }));
-
-      questions = seededShuffle(questions, `${application._id}:questions`).map((question, index) => ({
-        ...question,
-        id: `q${index + 1}`,
-        options: question.options.length ? seededShuffle(question.options, `${application._id}:options:${index}`) : [],
-      }));
-
-      return Questionnaire.findOneAndUpdate(
-        { applicationId: application._id },
-        { applicationId: application._id, questions },
-        { new: true, upsert: true, setDefaultsOnInsert: true },
-      );
     }
   }
 
-  const otherApplicationIds = await AppliedJobs.find({ jobId: application.jobId, _id: { $ne: application._id } }).distinct('_id');
-  const previousQuestionnaires = otherApplicationIds.length
-    ? await Questionnaire.find({ applicationId: { $in: otherApplicationIds } }).select('questions.prompt').lean()
-    : [];
-  const previousPrompts = new Set(previousQuestionnaires.flatMap((questionnaire) =>
-    (questionnaire.questions || []).map((question) => String(question.prompt || '').trim().toLowerCase()).filter(Boolean)));
-  const exclusions = [...previousPrompts].slice(0, 40);
+  // Ensure every applicant gets 5 to 8 questions total
+  if (questions.length < 5) {
+    const otherApplicationIds = await AppliedJobs.find({ jobId: application.jobId, _id: { $ne: application._id } }).distinct('_id');
+    const previousQuestionnaires = otherApplicationIds.length
+      ? await Questionnaire.find({ applicationId: { $in: otherApplicationIds } }).select('questions.prompt').lean()
+      : [];
+    const previousPrompts = new Set(previousQuestionnaires.flatMap((questionnaire) =>
+      (questionnaire.questions || []).map((question) => String(question.prompt || '').trim().toLowerCase()).filter(Boolean)));
+    const exclusions = [...previousPrompts].slice(0, 40);
 
-  for (let attempt = 0; attempt < 2 && questions.length < 5; attempt += 1) {
-    try {
-      const result = await aiJson(
-        'Create fair, job-relevant, applicant-specific screening questions. Return JSON only.',
-        `Application variant: ${application._id}-${attempt + 1}\nCandidate variant: ${application.createdBy || application.candidate || userId || ''}\nJob title: ${job?.projectTitle || job?.position || ''}\nJob description: ${String(job?.description || '').slice(0, 8000)}\nApplicant resume summary: ${String(application.parsedAbout || '').slice(0, 3000)}\nApplicant skills: ${(application.parsedSkills || []).join(', ')}\nApplicant projects: ${JSON.stringify(application.parsedProjects || []).slice(0, 5000)}\nQuestions already used for this job and forbidden for this applicant: ${JSON.stringify(exclusions)}\nCreate 5 to 8 original MCQs tailored to this applicant's specific resume evidence and this job description. Return {"questions":[{"id":"q1","type":"mcq","prompt":"...","options":["..."],"correct_answer":"exact option text"}]}. Each must have exactly 4 distinct options and one unambiguous answer.`,
-        2600,
-        0.65,
-        null,
-        userId,
-        "/v1/applications/generate-screening-test-mcq"
-      );
+    const neededCount = Math.max(5 - questions.length, 5);
 
-      const parsed = (Array.isArray(result.questions) ? result.questions : []).map((q, index) => {
-        const promptText = String(q.prompt || '').trim();
-        const opts = [...new Set((Array.isArray(q.options) ? q.options : []).map(String).map((o) => o.trim()).filter(Boolean))].slice(0, 4);
-        let correct = String(q.correct_answer || q.correctAnswer || '').trim();
-        if (opts.length > 0 && !opts.includes(correct)) {
-          const match = opts.find((o) => o.toLowerCase() === correct.toLowerCase()) || opts[0];
-          correct = match;
-        }
-        return {
-          id: `q${index + 1}`,
-          type: 'mcq',
-          prompt: promptText,
-          options: opts,
-          correctAnswer: correct,
-        };
-      }).filter((q) => q.prompt && q.options.length >= 2);
+    for (let attempt = 0; attempt < 2 && questions.length < 5; attempt += 1) {
+      try {
+        const result = await aiJson(
+          'Create fair, job-relevant, applicant-specific screening questions. Return JSON only.',
+          `Application variant: ${application._id}-${attempt + 1}\nCandidate variant: ${application.createdBy || application.candidate || userId || ''}\nJob title: ${job?.projectTitle || job?.position || ''}\nJob description: ${String(job?.description || '').slice(0, 8000)}\nApplicant resume summary: ${String(application.parsedAbout || '').slice(0, 3000)}\nApplicant skills: ${(application.parsedSkills || []).join(', ')}\nApplicant projects: ${JSON.stringify(application.parsedProjects || []).slice(0, 5000)}\nQuestions already used for this job and forbidden for this applicant: ${JSON.stringify(exclusions)}\nCreate ${neededCount} original MCQs tailored to this applicant's specific resume evidence and this job description. Return {"questions":[{"id":"q1","type":"mcq","prompt":"...","options":["..."],"correct_answer":"exact option text"}]}. Each must have exactly 4 distinct options and one unambiguous answer.`,
+          2600,
+          0.65,
+          null,
+          userId,
+          '/v1/applications/generate-screening-test-mcq'
+        );
 
-      const filtered = attempt === 0
-        ? parsed.filter((q) => !previousPrompts.has(q.prompt.toLowerCase()))
-        : parsed;
+        const parsed = (Array.isArray(result.questions) ? result.questions : []).map((q, index) => {
+          const promptText = String(q.prompt || '').trim();
+          const opts = [...new Set((Array.isArray(q.options) ? q.options : []).map(String).map((o) => o.trim()).filter(Boolean))].slice(0, 4);
+          let correct = String(q.correct_answer || q.correctAnswer || '').trim();
+          if (opts.length > 0 && !opts.includes(correct)) {
+            const match = opts.find((o) => o.toLowerCase() === correct.toLowerCase()) || opts[0];
+            correct = match;
+          }
+          return {
+            id: `q${questions.length + index + 1}`,
+            type: 'mcq',
+            prompt: promptText,
+            options: opts,
+            correctAnswer: correct,
+          };
+        }).filter((q) => q.prompt && q.options.length >= 2);
 
-      if (filtered.length > questions.length) {
-        questions = filtered;
+        const filtered = attempt === 0
+          ? parsed.filter((q) => !previousPrompts.has(q.prompt.toLowerCase()))
+          : parsed;
+
+        questions = [...questions, ...filtered];
+      } catch (err) {
+        console.warn(`AI questionnaire generation attempt ${attempt + 1} failed: ${err.message}`);
       }
-    } catch (err) {
-      console.warn(`AI questionnaire generation attempt ${attempt + 1} failed: ${err.message}`);
     }
   }
 
-  // Fallback if AI generation returns fewer than 4 questions
-  if (questions.length < 4) {
+  // Fallback bank if still fewer than 5 questions
+  if (questions.length < 5) {
     const title = job?.projectTitle || job?.position || 'Role';
     const reqSkill = (job?.requiredSkills || job?.cultureArea || ['Technical Knowledge'])[0] || 'Technical Knowledge';
-    questions = [
+    const fallbacks = [
       {
-        id: 'q1', type: 'mcq',
+        type: 'mcq',
         prompt: `What is the most effective engineering approach when working as a ${title}?`,
         options: [
           'Following established design patterns, writing tests, and documenting implementation',
@@ -188,7 +225,7 @@ const generateQuestionnaire = async (application, job, userId = null) => {
         correctAnswer: 'Following established design patterns, writing tests, and documenting implementation'
       },
       {
-        id: 'q2', type: 'mcq',
+        type: 'mcq',
         prompt: `When applying ${reqSkill} in project development, which principle ensures long-term system stability?`,
         options: [
           'Modular code organization with automated verification and clear boundaries',
@@ -199,7 +236,7 @@ const generateQuestionnaire = async (application, job, userId = null) => {
         correctAnswer: 'Modular code organization with automated verification and clear boundaries'
       },
       {
-        id: 'q3', type: 'mcq',
+        type: 'mcq',
         prompt: `How should unexpected edge cases or architectural bottlenecks be addressed during execution?`,
         options: [
           'Analyze root cause, prototype solution, measure performance, and communicate changes',
@@ -210,7 +247,7 @@ const generateQuestionnaire = async (application, job, userId = null) => {
         correctAnswer: 'Analyze root cause, prototype solution, measure performance, and communicate changes'
       },
       {
-        id: 'q4', type: 'mcq',
+        type: 'mcq',
         prompt: `What practice best ensures software quality before releasing new features?`,
         options: [
           'Comprehensive unit testing, integration tests, and peer code reviews',
@@ -221,7 +258,7 @@ const generateQuestionnaire = async (application, job, userId = null) => {
         correctAnswer: 'Comprehensive unit testing, integration tests, and peer code reviews'
       },
       {
-        id: 'q5', type: 'mcq',
+        type: 'mcq',
         prompt: `What is critical when integrating new components into an existing architecture?`,
         options: [
           'Ensuring backward compatibility, API contracts, and updating technical docs',
@@ -232,6 +269,13 @@ const generateQuestionnaire = async (application, job, userId = null) => {
         correctAnswer: 'Ensuring backward compatibility, API contracts, and updating technical docs'
       }
     ];
+
+    for (const fb of fallbacks) {
+      if (questions.length >= 5) break;
+      if (!questions.some((q) => q.prompt === fb.prompt)) {
+        questions.push(fb);
+      }
+    }
   }
 
   questions = questions.slice(0, 8).map((q, index) => ({
@@ -255,10 +299,26 @@ const publicQuestionnaire = (questionnaire) => {
   };
 };
 
-const submitAnswers = async (questionnaire, answers) => {
+const submitAnswers = async (questionnaire, answers, userId = null) => {
   const answerMap = new Map((Array.isArray(answers) ? answers : []).map((a) => [String(a.questionId), String(a.answer || '')]));
-  const correct = questionnaire.questions.reduce((total, question) => total + (answerMap.get(String(question.id)) === question.correctAnswer ? 1 : 0), 0);
-  const score = Math.round((correct / questionnaire.questions.length) * 100);
+  const questionScores = await Promise.all(
+    questionnaire.questions.map(async (question) => {
+      const candidateAnswer = answerMap.get(String(question.id)) || '';
+      const isTextQuestion = question.type === 'text' || !Array.isArray(question.options) || question.options.length === 0;
+
+      if (isTextQuestion) {
+        return evaluateTextAnswer(question.prompt, candidateAnswer, question.correctAnswer, userId);
+      }
+
+      const isCorrect = String(candidateAnswer).trim().toLowerCase() === String(question.correctAnswer || '').trim().toLowerCase();
+      return isCorrect ? 100 : 0;
+    })
+  );
+
+  const totalQuestions = questionnaire.questions.length || 1;
+  const totalEarned = questionScores.reduce((sum, s) => sum + s, 0);
+  const score = Math.min(100, Math.max(0, Math.round(totalEarned / totalQuestions)));
+
   await QuestionnaireResponse.findOneAndUpdate(
     { questionnaireId: questionnaire._id },
     { questionnaireId: questionnaire._id, answers, score, submittedAt: new Date() },

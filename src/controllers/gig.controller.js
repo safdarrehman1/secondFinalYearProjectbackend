@@ -299,6 +299,37 @@ const uploadGigImage = catchAsync(async (req, res) => {
   }
 });
 
+const Gig = require('../models/gig.model');
+
+const getGigsAdmin = catchAsync(async (req, res) => {
+  const gigs = await Gig.find({})
+    .populate('userId', 'name email profilePicture')
+    .sort({ createdAt: -1 })
+    .lean();
+  res.status(httpStatus.OK).json({ success: true, data: gigs });
+});
+
+const updateGigStatusAdmin = catchAsync(async (req, res) => {
+  const { status } = req.body;
+  const valid = ['active', 'paused', 'draft', 'pending_approval'];
+  if (!valid.includes(status)) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Invalid gig status');
+  }
+  const gig = await Gig.findByIdAndUpdate(
+    req.params.gigId,
+    { status },
+    { new: true, runValidators: true }
+  ).populate('userId', 'name email profilePicture');
+  if (!gig) throw new ApiError(httpStatus.NOT_FOUND, 'Gig not found');
+  res.status(httpStatus.OK).json({ success: true, data: gig });
+});
+
+const deleteGigAdmin = catchAsync(async (req, res) => {
+  const gig = await Gig.findByIdAndDelete(req.params.gigId);
+  if (!gig) throw new ApiError(httpStatus.NOT_FOUND, 'Gig not found');
+  res.status(httpStatus.OK).json({ success: true, message: 'Gig deleted successfully' });
+});
+
 module.exports = {
   createGig,
   getGigs,
@@ -320,5 +351,8 @@ module.exports = {
   getPopularGigs,
   getSellerGigAnalytics,
   uploadGigVideo,
-  uploadGigImage
+  uploadGigImage,
+  getGigsAdmin,
+  updateGigStatusAdmin,
+  deleteGigAdmin,
 };

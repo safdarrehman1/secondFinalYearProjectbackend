@@ -53,11 +53,23 @@ const gigSchema = mongoose.Schema(
           min: 5,
           max: 10000,
         },
+        deliveryTime: {
+          type: Number,
+          default: 3,
+          min: 1,
+          max: 180,
+        },
+        deliveryDays: {
+          type: Number,
+          default: 3,
+          min: 1,
+          max: 180,
+        },
         revisions: {
           type: Number,
-          // required: true,
+          default: 2,
           min: 0,
-          max: 10,
+          max: 50,
         },
         features: [
           {
@@ -80,10 +92,23 @@ const gigSchema = mongoose.Schema(
           min: 5,
           max: 10000,
         },
+        deliveryTime: {
+          type: Number,
+          default: 5,
+          min: 1,
+          max: 180,
+        },
+        deliveryDays: {
+          type: Number,
+          default: 5,
+          min: 1,
+          max: 180,
+        },
         revisions: {
           type: Number,
+          default: 4,
           min: 0,
-          max: 10,
+          max: 50,
         },
         features: [
           {
@@ -106,10 +131,23 @@ const gigSchema = mongoose.Schema(
           min: 5,
           max: 10000,
         },
+        deliveryTime: {
+          type: Number,
+          default: 7,
+          min: 1,
+          max: 180,
+        },
+        deliveryDays: {
+          type: Number,
+          default: 7,
+          min: 1,
+          max: 180,
+        },
         revisions: {
           type: Number,
+          default: 10,
           min: 0,
-          max: 10,
+          max: 50,
         },
         features: [
           {

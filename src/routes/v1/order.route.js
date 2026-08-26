@@ -7,26 +7,20 @@ const router = express.Router();
 
 router.post("/create", auth("user"), orderController.createOrder);
 
-// Purchase endpoint (compatibility with frontend POST /v1/order/purchase) - obsolete
-// const { purchaseController } = require("../../controllers");
-// router.post("/purchase", auth("user"), purchaseController.createPurchase);
-
 router.get("/sales", auth("user"), orderController.getCompletedOrders);
+router.get("/my/orders", auth("user", "recruiter"), orderController.getMyOrders);
 
-router.get(
-  "/my/orders",
-  auth("user", "recruiter"),
-  orderController.getMyOrders,
-);
-
-// Admin routes for cancellation management (must be before :orderId routes)
+// Admin routes for orders and cancellations (must be before :orderId routes)
+router.get("/admin/all", auth("admin"), orderController.getOrdersAdmin);
+router.patch("/admin/:orderId/status", auth("admin"), orderController.updateOrderStatusAdmin);
+router.delete("/admin/:orderId", auth("admin"), orderController.deleteOrderAdmin);
 router.get(
   "/cancellations/rejected",
   auth("admin"),
   orderController.getRejectedCancellationOrders,
 );
 
-// Get an order by ID - moved after specific routes to avoid conflicts
+// Get an order by ID
 router.get(
   "/details/:orderId",
   auth("user", "recruiter"),
