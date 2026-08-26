@@ -28,7 +28,9 @@ const createGig = {
                 title: Joi.string().required().max(50),
                 description: Joi.string().required().max(300),
                 price: Joi.number().required().min(5).max(10000),
-                revisions: Joi.number().required().min(0).max(10),
+                deliveryTime: Joi.number().min(1).max(180).optional(),
+                deliveryDays: Joi.number().min(1).max(180).optional(),
+                revisions: Joi.number().min(0).max(50).optional().default(2),
                 features: Joi.array().items(Joi.string().max(100)).default([]),
                 duration: Joi.string().allow("").optional(),
                 instrument: Joi.string().allow("").optional(),
@@ -36,10 +38,12 @@ const createGig = {
               .required(),
             standard: Joi.object()
               .keys({
-                title: Joi.string().max(50).optional(),
-                description: Joi.string().max(300).optional(),
+                title: Joi.string().max(50).optional().allow(""),
+                description: Joi.string().max(300).optional().allow(""),
                 price: Joi.number().min(5).max(10000).optional(),
-                revisions: Joi.number().min(0).max(10).optional(),
+                deliveryTime: Joi.number().min(1).max(180).optional(),
+                deliveryDays: Joi.number().min(1).max(180).optional(),
+                revisions: Joi.number().min(0).max(50).optional().default(4),
                 features: Joi.array()
                   .items(Joi.string().max(100))
                   .default([])
@@ -50,10 +54,12 @@ const createGig = {
               .optional(),
             premium: Joi.object()
               .keys({
-                title: Joi.string().max(50).optional(),
-                description: Joi.string().max(300).optional(),
+                title: Joi.string().max(50).optional().allow(""),
+                description: Joi.string().max(300).optional().allow(""),
                 price: Joi.number().min(5).max(10000).optional(),
-                revisions: Joi.number().min(0).max(10).optional(),
+                deliveryTime: Joi.number().min(1).max(180).optional(),
+                deliveryDays: Joi.number().min(1).max(180).optional(),
+                revisions: Joi.number().min(0).max(50).optional().default(10),
                 features: Joi.array()
                   .items(Joi.string().max(100))
                   .default([])
@@ -179,25 +185,31 @@ const updateGig = {
           title: Joi.string().max(50),
           description: Joi.string().max(300),
           price: Joi.number().min(5).max(10000),
-          revisions: Joi.number().min(0).max(10),
+          deliveryTime: Joi.number().min(1).max(180).optional(),
+          deliveryDays: Joi.number().min(1).max(180).optional(),
+          revisions: Joi.number().min(0).max(50),
           features: Joi.array().items(Joi.string().max(100)).default([]),
           duration: Joi.string().allow(""),
           instrument: Joi.string().allow(""),
         }),
         standard: Joi.object().keys({
-          title: Joi.string().max(50),
-          description: Joi.string().max(300),
+          title: Joi.string().max(50).allow(""),
+          description: Joi.string().max(300).allow(""),
           price: Joi.number().min(5).max(10000),
-          revisions: Joi.number().min(0).max(10),
+          deliveryTime: Joi.number().min(1).max(180).optional(),
+          deliveryDays: Joi.number().min(1).max(180).optional(),
+          revisions: Joi.number().min(0).max(50),
           features: Joi.array().items(Joi.string().max(100)).default([]),
           duration: Joi.string().allow(""),
           instrument: Joi.string().allow(""),
         }),
         premium: Joi.object().keys({
-          title: Joi.string().max(50),
-          description: Joi.string().max(300),
+          title: Joi.string().max(50).allow(""),
+          description: Joi.string().max(300).allow(""),
           price: Joi.number().min(5).max(10000),
-          revisions: Joi.number().min(0).max(10),
+          deliveryTime: Joi.number().min(1).max(180).optional(),
+          deliveryDays: Joi.number().min(1).max(180).optional(),
+          revisions: Joi.number().min(0).max(50),
           features: Joi.array().items(Joi.string().max(100)).default([]),
           duration: Joi.string().allow(""),
           instrument: Joi.string().allow(""),

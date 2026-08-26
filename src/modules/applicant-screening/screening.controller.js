@@ -55,6 +55,71 @@ const generateQuestionnaire = catchAsync(async (req, res) => {
   return res.send(screeningService.publicQuestionnaire(questionnaire));
 });
 
+const getApplication = catchAsync(async (req, res) => {
+  let application = await AppliedJobs.findById(req.params.id)
+    .populate("jobId")
+    .lean();
+
+  if (!application) {
+    const FulltimeApplication = require("../../models/application.model");
+    const fulltimeApp = await FulltimeApplication.findById(req.params.id)
+      .populate("job")
+      .lean();
+    if (fulltimeApp) {
+      const job = fulltimeApp.job || {};
+      return res.send({
+        success: true,
+        data: {
+          ...fulltimeApp,
+          id: fulltimeApp._id,
+          job: {
+            ...job,
+            id: job._id,
+            title: job.projectTitle || job.position || "Full-time Role",
+            type: job.employmentType || "full_time",
+          },
+          finalStatus: fulltimeApp.status || "under_review",
+          testStatus: fulltimeApp.test?.submittedAt ? "completed" : "unlocked",
+          resumeScore: {
+            weighted: fulltimeApp.matchScore || 0,
+          },
+        },
+      });
+    }
+    throw new ApiError(httpStatus.NOT_FOUND, "Application not found");
+  }
+
+  const job = application.jobId || {};
+  const data = {
+    ...application,
+    id: application._id,
+    job: {
+      ...job,
+      id: job._id,
+      title: job.projectTitle || job.position || "Freelance Project",
+      type: job.employmentType || "freelance",
+    },
+    finalStatus:
+      application.screeningStatus === "test_submitted"
+        ? application.qualified
+          ? "shortlisted"
+          : "under_review"
+        : application.screeningStatus || "under_review",
+    testStatus:
+      application.screeningStatus === "test_submitted"
+        ? "completed"
+        : "unlocked",
+    resumeScore: {
+      weighted: application.matchScore || application.questionnaireScore || 0,
+    },
+  };
+
+  return res.send({
+    success: true,
+    data,
+  });
+});
+
 const submitQuestionnaire = catchAsync(async (req, res) => {
   const application = await ownedApplication(req.params.id, req.user.id);
   if (application.disqualifiedReason)
@@ -67,6 +132,7 @@ const submitQuestionnaire = catchAsync(async (req, res) => {
   const score = await screeningService.submitAnswers(
     questionnaire,
     req.body.answers,
+    req.user.id,
   );
   application.questionnaireScore = score;
   application.qualified = score >= 60;
@@ -220,6 +286,7 @@ const deleteFreelancerApplicationAdmin = catchAsync(async (req, res) => {
 });
 
 module.exports = {
+  getApplication,
   generateQuestionnaire,
   submitQuestionnaire,
   disqualify,

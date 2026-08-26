@@ -22,13 +22,13 @@ const { hasAccountRole } = require("../utils/accountRoles");
 
 const createOrder = async (req, res) => {
   try {
-    if (!hasAccountRole(req.user, "company")) {
-      throw new ApiError(httpStatus.FORBIDDEN, "Only Company accounts can send project offers.");
-    }
     // Handle both direct order data and nested order data from Redux
     const orderData = req.body.order || req.body;
 
     if (orderData.jobId) {
+      if (!hasAccountRole(req.user, "company")) {
+        throw new ApiError(httpStatus.FORBIDDEN, "Only Company accounts can send project offers for jobs.");
+      }
       const clientId = req.user._id;
       const job = await Job.findOneAndUpdate(
         {
@@ -147,52 +147,35 @@ const createOrder = async (req, res) => {
       }
     }
 
-    orderData.createdBy = req.user._id; // Attach the user ID from the authenticated request
+    orderData.createdBy = req.user._id;
 
     // If order status is inprogress, create chat with cardData directly
     let chatId = null;
     if (orderData.status === "inprogress") {
-      const createdBy = orderData.createdBy; // Get the already set createdBy
+      const createdBy = orderData.createdBy;
       let recruiterId = orderData.recruiterId;
 
-      console.log("Request data:", {
-        createdBy: createdBy.toString(),
-        recruiterId: recruiterId,
-        chat_id: orderData.chat_id,
-      });
-
-      // If recruiterId is not provided but chat_id exists, get from chat participants
       if (!recruiterId && orderData.chat_id) {
-        console.log("Looking for recruiterId from chat_id:", orderData.chat_id);
         try {
           const existingChat = await ChatService.getChatById(orderData.chat_id);
           if (existingChat) {
-            console.log("Chat participants:", existingChat.participants);
-            console.log("CreatedBy:", createdBy.toString());
-            // Get participant who is not the createdBy
             recruiterId = existingChat.participants.find(
               (p) => p.toString() !== createdBy.toString(),
             );
-            console.log("Found recruiterId:", recruiterId);
-          } else {
-            console.log("Chat not found with ID:", orderData.chat_id);
           }
         } catch (chatError) {
           console.error("Error fetching chat:", chatError);
         }
       }
 
-      recruiterId = orderData.chat_id || recruiterId; // Use chat_id if available, otherwise use recruiterId
+      recruiterId = recruiterId || orderData.chat_id;
 
-      // Validate recruiterId must exist
       if (!recruiterId) {
-        console.log("recruiterId not found!");
         return res.status(httpStatus.BAD_REQUEST).send({
-          message: "Recruiter ID is required for order creation",
+          message: "Recipient ID is required for order creation",
         });
       }
 
-      // Set recruiterId to orderData
       orderData.recruiterId = recruiterId;
 
       // Create order first to get ID
@@ -209,14 +192,19 @@ const createOrder = async (req, res) => {
         status: tempOrder.status,
         createdBy: tempOrder.createdBy.toString(),
         recruiterId: tempOrder.recruiterId.toString(),
+        packageType: tempOrder.packageType || orderData.packageType || "basic",
+        packageDetails: tempOrder.packageDetails || orderData.packageDetails || null,
+        gigId: tempOrder.gigId ? tempOrder.gigId.toString() : (orderData.gigId || null),
+        serviceTitle: orderData.serviceTitle || tempOrder.title,
+        revisions: tempOrder.revisions || orderData.revisions || 2,
+        features: tempOrder.packageDetails?.features || orderData.features || [],
         createdAt: tempOrder.createdAt,
       };
 
-      // Create message with cardData - for Order Request
-      const message = `📝 Order Request: ${tempOrder.title}`;
+      const tierLabel = (cardData.packageType || "Basic").toUpperCase();
+      const message = `📝 Service Offer (${tierLabel} Package): ${tempOrder.title}`;
 
       try {
-        // Create chat with cardData directly
         const chat = await ChatService.saveMessage(
           createdBy,
           recruiterId,
@@ -225,15 +213,10 @@ const createOrder = async (req, res) => {
         );
         chatId = chat._id;
 
-        // Update order with chat_id and log activity
         tempOrder.chat_id = chatId;
         tempOrder.activities = tempOrder.activities || [];
         await tempOrder.save();
 
-        console.log(
-          "Chat created successfully with cardData for order:",
-          tempOrder._id,
-        );
         res.status(httpStatus.CREATED).send(tempOrder);
         return;
       } catch (chatError) {
@@ -243,7 +226,6 @@ const createOrder = async (req, res) => {
         });
       }
     } else {
-      // For status other than inprogress, create regular order
       const order = await orderService.createOrder(orderData);
       res.status(httpStatus.CREATED).send(order);
     }

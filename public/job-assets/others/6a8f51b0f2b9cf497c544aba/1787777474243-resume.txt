@@ -1,0 +1,22 @@
+
+JANE CANDIDATE
+Email: candidate_o5wkt0@audit.com
+Phone: +1 555-0199
+
+PROFESSIONAL SUMMARY
+Senior React Native Engineer with 6+ years of experience architecting and shipping high-performance cross-platform mobile applications for iOS and Android. Specialized in TypeScript, Expo, Redux Toolkit, Zustand, TurboModules, and mobile architecture.
+
+CORE SKILLS & TECHNOLOGIES
+- Mobile Development: React Native, Expo, iOS, Android, TurboModules
+- Frontend Languages: TypeScript, JavaScript, CSS, HTML5
+- State Management: Zustand, Redux Toolkit, React Context
+- Networking & APIs: Axios, REST APIs, Socket.IO, WebSockets, GraphQL
+- Tools: Git, GitHub, EAS Build, Xcode, Android Studio
+
+PROFESSIONAL EXPERIENCE
+Senior Mobile Software Engineer | MobileTech Labs (2021 - Present)
+- Architected enterprise mobile application with 100k+ downloads.
+- Implemented real-time messaging, optimistic state caching, and JWT auto-refresh.
+
+EDUCATION
+Bachelor of Science in Computer Science (2017 - 2021)

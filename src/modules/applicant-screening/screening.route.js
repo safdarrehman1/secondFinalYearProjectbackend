@@ -14,6 +14,7 @@ router.get('/admin/all', auth('admin'), controller.getFreelancerApplicationsAdmi
 router.patch('/admin/:id/status', auth('admin'), controller.updateFreelancerApplicationStatusAdmin);
 router.delete('/admin/:id', auth('admin'), controller.deleteFreelancerApplicationAdmin);
 
+router.get('/:id', auth(), controller.getApplication);
 router.post('/generate-message', auth(), messageLimiter, aiController.generateApplicationMessage);
 router.post('/:id/generate-questionnaire', auth(), controller.generateQuestionnaire);
 router.post('/:id/questionnaire/submit', auth(), controller.submitQuestionnaire);

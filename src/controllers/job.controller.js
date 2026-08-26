@@ -238,21 +238,16 @@ const applyJob = catchAsync(async (req, res) => {
   if (!hasAccountRole(req.user, requiredRole)) {
     throw new ApiError(httpStatus.FORBIDDEN, `Only ${requiredRole} or Hybrid accounts can apply to this posting.`);
   }
-  const expiryTime = targetJob.expiresAt
-    ? new Date(targetJob.expiresAt).getTime()
-    : targetJob.createdAt && targetJob.activePeriod
-      ? new Date(targetJob.createdAt).getTime() +
-        targetJob.activePeriod * 24 * 60 * 60 * 1000
-      : null;
-  const hasStartedOrEnded =
-    targetJob.orderTracking &&
-    targetJob.orderTracking.status !== "not_started";
+  const isAssigned = Boolean(
+    targetJob.isAssigned ||
+      targetJob.assignedTo ||
+      (targetJob.orderTracking &&
+        ["in_progress", "completed", "disputed"].includes(
+          targetJob.orderTracking.status,
+        )),
+  );
 
-  if (
-    targetJob.status !== "active" ||
-    hasStartedOrEnded ||
-    (expiryTime && Date.now() >= expiryTime)
-  ) {
+  if (targetJob.status !== "active" || isAssigned) {
     throw new ApiError(
       httpStatus.BAD_REQUEST,
       "This job is no longer accepting applications.",

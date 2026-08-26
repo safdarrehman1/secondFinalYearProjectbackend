@@ -81,19 +81,16 @@ const applyToJob = catchAsync(async (req, res) => {
     throw new ApiError(httpStatus.NOT_FOUND, "Job not found");
   }
 
-  const expiryTime = job.expiresAt
-    ? new Date(job.expiresAt).getTime()
-    : job.createdAt && job.activePeriod
-      ? new Date(job.createdAt).getTime() + job.activePeriod * 24 * 60 * 60 * 1000
-      : null;
-  const hasStartedOrEnded =
-    job.orderTracking && job.orderTracking.status !== "not_started";
+  const isAssigned = Boolean(
+    job.isAssigned ||
+      job.assignedTo ||
+      (job.orderTracking &&
+        ["in_progress", "completed", "disputed"].includes(
+          job.orderTracking.status,
+        )),
+  );
 
-  if (
-    job.status !== "active" ||
-    hasStartedOrEnded ||
-    (expiryTime && Date.now() >= expiryTime)
-  ) {
+  if (job.status !== "active" || isAssigned) {
     throw new ApiError(
       httpStatus.BAD_REQUEST,
       "This job is no longer accepting applications."
