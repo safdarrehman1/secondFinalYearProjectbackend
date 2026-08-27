@@ -198,20 +198,20 @@ const getUsers = async (req, res) => {
 };
 const sendMessage = async (req, res) => {
   let { recipientId } = req.params;
-  let { message, attachments, type, jobId, clientMessageId } = req.body;
+  let { message, attachments, type, jobId, clientMessageId, cardData } = req.body;
   const senderId = req.user.id;
   try {
-    if (!message && (!attachments || attachments.length === 0)) {
+    if (!message && (!attachments || attachments.length === 0) && !cardData) {
       return res
         .status(400)
-        .json({ error: "Message or attachments are required" });
+        .json({ error: "Message, attachments, or cardData are required" });
     }
 
     const newMessage = await ChatService.saveMessage(
       senderId,
       recipientId,
-      message,
-      null,
+      message || (cardData ? `Sent ${cardData.type || 'card'}` : ''),
+      cardData || null,
       attachments,
       type || "direct",
       jobId || null,

@@ -10,10 +10,13 @@ const messageLimiter = rateLimit({
   keyGenerator: (req) => `${req.user?.id || req.ip}:${req.body?.jobId || 'unknown'}`,
   handler: (_req, res) => res.status(429).send({ success: false, message: 'You can generate up to 3 messages for this application per day.' }),
 });
+const applicationController = require('../../controllers/applicationController');
+
 router.get('/admin/all', auth('admin'), controller.getFreelancerApplicationsAdmin);
 router.patch('/admin/:id/status', auth('admin'), controller.updateFreelancerApplicationStatusAdmin);
 router.delete('/admin/:id', auth('admin'), controller.deleteFreelancerApplicationAdmin);
 
+router.get('/my-applications', auth(), applicationController.getMyApplications);
 router.get('/:id', auth(), controller.getApplication);
 router.post('/generate-message', auth(), messageLimiter, aiController.generateApplicationMessage);
 router.post('/:id/generate-questionnaire', auth(), controller.generateQuestionnaire);

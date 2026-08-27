@@ -1,0 +1,17 @@
+Employee John
+Email: employee_8aaek2@test.com
+Phone: +1 555-0199
+
+PROFESSIONAL SUMMARY
+Experienced Senior React Native Engineer specializing in building scalable mobile applications with Expo, TypeScript, Redux, and Node.js.
+
+TECHNICAL SKILLS
+React Native, TypeScript, Redux, Expo, JavaScript, REST APIs, Git, Mobile Architecture, GraphQL
+
+WORK EXPERIENCE
+Senior Mobile Developer - TechCorp (2021 - Present)
+- Built enterprise mobile applications using React Native and Expo with 99.9% crash-free sessions.
+- Led front-end architecture and established best practices for performance and automated testing.
+
+EDUCATION
+Bachelor of Science in Software Engineering - State University
