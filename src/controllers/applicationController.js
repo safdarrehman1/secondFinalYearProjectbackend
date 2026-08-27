@@ -2,7 +2,7 @@ const httpStatus = require("http-status");
 const ApiError = require("../utils/ApiError");
 const catchAsync = require("../utils/catchAsync");
 const pick = require("../utils/pick");
-const { Job, Application, User, Notification } = require("../models");
+const { Job, Application, User, Notification, AppliedJobs } = require("../models");
 const applicationService = require("../services/applicationService");
 const chatService = require("../services/chat.service");
 const { uploadFileToS3 } = require("../utils/s3Upload");
@@ -570,18 +570,103 @@ const withdrawApplication = catchAsync(async (req, res) => {
  * @route GET /v1/applications/my-applications
  */
 const getMyApplications = catchAsync(async (req, res) => {
-  const filter = { applicant: req.user.id };
-  const options = pick(req.query, ["sortBy", "limit", "page"]);
-  options.sortBy = options.sortBy || "createdAt:desc";
+  const userId = req.user.id || req.user._id;
+  const page = parseInt(req.query.page, 10) || 1;
+  const limit = parseInt(req.query.limit, 10) || 10;
+  const skip = (page - 1) * limit;
 
-  const result = await Application.paginate(filter, {
-    ...options,
-    populate: "job",
+  // 1. Fetch freelance AppliedJobs documents
+  const appliedJobs = await AppliedJobs.find({ createdBy: userId })
+    .populate("jobId")
+    .lean();
+
+  // 2. Fetch fulltime Application documents
+  const fulltimeApps = await Application.find({ applicant: userId })
+    .populate("job")
+    .lean();
+
+  // Format AppliedJobs into unified application shape
+  const formattedAppliedJobs = appliedJobs.map((app) => {
+    const job = app.jobId || {};
+    const testScore = app.questionnaireScore ?? null;
+    const isQualified = app.qualified ?? (testScore !== null ? testScore >= 60 : false);
+    const status =
+      app.screeningStatus === "test_submitted"
+        ? isQualified
+          ? "shortlisted"
+          : "under-review"
+        : app.screeningStatus === "test_pending"
+          ? "test-sent"
+          : app.screeningStatus === "disqualified"
+            ? "rejected"
+            : "applied";
+
+    return {
+      _id: app._id,
+      id: app._id,
+      job: {
+        ...job,
+        _id: job._id,
+        id: job._id,
+        projectTitle: job.projectTitle || job.position || job.title || "Job Application",
+        employmentType: job.employmentType || (job.jobType ? (Array.isArray(job.jobType) ? job.jobType.join(", ") : job.jobType) : "freelance"),
+        workMode: job.workMode || "remote",
+      },
+      jobId: job._id,
+      matchScore: app.matchScore || app.resumeMatchScore || 0,
+      questionnaireScore: app.questionnaireScore || 0,
+      status: status,
+      screeningStatus: app.screeningStatus,
+      qualified: app.qualified,
+      message: app.message,
+      createdAt: app.createdAt,
+      updatedAt: app.updatedAt,
+      type: "freelance",
+    };
   });
+
+  // Format Fulltime Applications into unified application shape
+  const formattedFulltimeApps = fulltimeApps.map((app) => {
+    const job = app.job || {};
+    return {
+      _id: app._id,
+      id: app._id,
+      job: {
+        ...job,
+        _id: job._id,
+        id: job._id,
+        projectTitle: job.projectTitle || job.position || job.title || "Full-time Position",
+        employmentType: job.employmentType || "full-time",
+        workMode: job.workMode || "remote",
+      },
+      jobId: job._id,
+      matchScore: app.matchScore || 0,
+      questionnaireScore: app.test?.evaluation?.score || null,
+      status: app.status || "applied",
+      createdAt: app.createdAt,
+      updatedAt: app.updatedAt,
+      type: "fulltime",
+    };
+  });
+
+  // Combine and sort by createdAt descending
+  const allApplications = [...formattedAppliedJobs, ...formattedFulltimeApps].sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  );
+
+  const totalResults = allApplications.length;
+  const totalPages = Math.ceil(totalResults / limit) || 1;
+  const paginatedResults = allApplications.slice(skip, skip + limit);
 
   return res.status(httpStatus.OK).json({
     success: true,
-    data: result,
+    data: {
+      results: paginatedResults,
+      page,
+      limit,
+      totalPages,
+      totalResults,
+    },
   });
 });
 

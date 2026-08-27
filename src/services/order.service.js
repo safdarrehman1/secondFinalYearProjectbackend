@@ -26,14 +26,22 @@ const releaseProjectAssignment = async (order) => {
 const createOrder = async (orderData) => {
   console.log(orderData, "data to save here");
 
-  // Set totalAmount sama dengan price jika belum ada
+  // Set totalAmount equal to price if not set
   if (!orderData.totalAmount) {
     orderData.totalAmount = orderData.price;
   }
 
-  // Handle gigId field - if gigId is provided, also set it to gig field for consistency
-  if (orderData.gigId) {
+  // Handle gigId field - if gigId is provided and valid, also set it to gig field
+  if (
+    orderData.gigId &&
+    mongoose.Types.ObjectId.isValid(orderData.gigId) &&
+    String(orderData.gigId) !== "0" &&
+    String(orderData.gigId).length === 24
+  ) {
     orderData.gig = orderData.gigId;
+  } else {
+    delete orderData.gigId;
+    delete orderData.gig;
   }
 
   // Initialize activities with creation event
@@ -53,6 +61,7 @@ const createOrder = async (orderData) => {
       httpStatus.INTERNAL_SERVER_ERROR,
       "Error while posting the order request",
     );
+
   /* notification logic */
   // Notification: Order Created
   try {

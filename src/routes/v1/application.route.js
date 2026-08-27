@@ -2,12 +2,15 @@ const express = require("express");
 const auth = require("../../middlewares/auth");
 const upload = require("../../config/multer");
 const applicationController = require("../../controllers/applicationController");
+const aiController = require("../../controllers/ai.controller");
 
 const router = express.Router();
 
 router.get("/admin/all", auth("admin"), applicationController.getApplicationsAdmin);
 router.patch("/admin/:applicationId/status", auth("admin"), applicationController.updateApplicationStatusAdmin);
 router.delete("/admin/:applicationId", auth("admin"), applicationController.deleteApplicationAdmin);
+
+router.post("/generate-message", auth(), aiController.generateApplicationMessage);
 
 router.post(
   "/apply/:jobId",

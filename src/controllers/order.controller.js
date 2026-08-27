@@ -145,6 +145,13 @@ const createOrder = async (req, res) => {
         );
         throw error;
       }
+    } else {
+      if (hasAccountRole(req.user, "company") || req.user.role === "recruiter") {
+        throw new ApiError(
+          httpStatus.FORBIDDEN,
+          "Only freelancers can create and send service proposals.",
+        );
+      }
     }
 
     orderData.createdBy = req.user._id;
@@ -322,6 +329,15 @@ const acceptOrder = async (req, res) => {
         "Only the freelancer receiving this offer can accept it",
       );
     }
+    if (
+      !pendingOrder.jobId &&
+      pendingOrder.createdBy.toString() === userId.toString()
+    ) {
+      throw new ApiError(
+        httpStatus.FORBIDDEN,
+        "You cannot accept your own service proposal",
+      );
+    }
 
     let reservedJob = null;
     if (pendingOrder.jobId) {
@@ -390,10 +406,15 @@ const acceptOrder = async (req, res) => {
 
     const message = `✅ Order Accepted: ${updatedOrder.title}`;
 
+    const recipientId =
+      userId.toString() === updatedOrder.createdBy.toString()
+        ? updatedOrder.recruiterId
+        : updatedOrder.createdBy;
+
     // Send to chat
     await ChatService.saveMessage(
       userId,
-      updatedOrder.recruiterId,
+      recipientId,
       message,
       cardData,
     );
@@ -426,6 +447,15 @@ const declineOrder = async (req, res) => {
         "Only the freelancer receiving this offer can decline it",
       );
     }
+    if (
+      !pendingOrder.jobId &&
+      pendingOrder.createdBy.toString() === userId.toString()
+    ) {
+      throw new ApiError(
+        httpStatus.FORBIDDEN,
+        "You cannot decline your own service proposal. Use withdraw instead.",
+      );
+    }
 
     // Update order status to cancel
     const updatedOrder = await orderService.updateOrderStatus(
@@ -451,10 +481,15 @@ const declineOrder = async (req, res) => {
 
     const message = `❌ Order Declined: ${updatedOrder.title}`;
 
+    const recipientId =
+      userId.toString() === updatedOrder.createdBy.toString()
+        ? updatedOrder.recruiterId
+        : updatedOrder.createdBy;
+
     // Send to chat
     await ChatService.saveMessage(
       userId,
-      updatedOrder.recruiterId,
+      recipientId,
       message,
       cardData,
     );

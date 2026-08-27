@@ -93,6 +93,7 @@ const getMyGigs = catchAsync(async (req, res) => {
   res.send(result);
 });
 
+
 const getMyFavoriteGigs = catchAsync(async (req, res) => {
   const result = await gigService.getMyFavoriteGigs(req.user.id);
   res.send(result);

@@ -56,6 +56,12 @@ router.route('/')
   .post(auth(), createLimiter, validate(gigValidation.createGig), gigController.createGig)
   .get(optionalAuth(), validate(gigValidation.getGigs), gigController.getGigs);
 
+router.route('/my/gigs')
+  .get(auth(), gigController.getMyGigs);
+
+router.route('/user/:userId')
+  .get(optionalAuth(), gigController.getGigsByUser);
+
 router.route('/:gigId')
   .get(optionalAuth(), validate(gigValidation.getGig), gigController.getGig)
   .put(auth(), validate(gigValidation.updateGig), gigController.updateGig)

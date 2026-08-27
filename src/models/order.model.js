@@ -37,7 +37,8 @@ const orderSchema = mongoose.Schema(
     },
     packageType: {
       type: String,
-      enum: ["basic", "standard", "premium"],
+      enum: ["basic", "standard", "premium", "custom"],
+      default: "custom",
     },
     packageDetails: {
       title: String,
